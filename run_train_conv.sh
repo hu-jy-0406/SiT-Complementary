@@ -1,11 +1,9 @@
-torchrun \
---nnodes=1 \
---nproc_per_node=8 \
-train_conv.py \
---model SiT-S/2 \
---epochs=200 \
---data-path /home/jiayou.zhang/hom/personal/imagenet_dataset/images/train \
---wandb \
---global-batch-size=1024
+#!/usr/bin/env bash
+set -euo pipefail
 
-# batch_size x 4, lr x 2
+export RESULTS_DIR="${RESULTS_DIR:-results/conv-layer}"
+export RUN_NAME="${RUN_NAME:-SiT-S-2-ConvLayer-bs256-lr1e-4}"
+export TRAINING_ENTRYPOINT=train_conv.py
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+exec "$SCRIPT_DIR/run_train.sh" "${@}"

@@ -8,15 +8,21 @@ evaluation metrics via the ADM repo: https://github.com/openai/guided-diffusion/
 
 For a simple single-GPU/CPU sampling script, see sample.py.
 """
+import importlib
+import os
+
 import torch
 import torch.distributed as dist
-from models_rot_head import SiT_models
+
+MODEL_MODULE_NAME = os.environ.get("SIT_MODEL_MODULE", "models")
+model_module = importlib.import_module(MODEL_MODULE_NAME)
+SiT_models = model_module.SiT_models
+MODEL_IMPLEMENTATION_PATH = os.path.realpath(model_module.__file__)
 from download import find_model
 from transport import create_transport, Sampler
 from diffusers.models import AutoencoderKL
 from train_utils import parse_ode_args, parse_sde_args, parse_transport_args
 from tqdm import tqdm
-import os
 from PIL import Image
 import numpy as np
 import math
@@ -47,6 +53,12 @@ def main(mode, args):
     """
     torch.backends.cuda.matmul.allow_tf32 = args.tf32  # True: fast but may lead to some small numerical differences
     assert torch.cuda.is_available(), "Sampling with DDP requires at least one GPU. sample.py supports CPU-only usage"
+    expected_model_module = os.environ.get("SIT_EXPECTED_MODEL_MODULE")
+    if expected_model_module and MODEL_MODULE_NAME != expected_model_module:
+        raise RuntimeError(
+            f"Expected model module {expected_model_module!r}, but loaded "
+            f"{MODEL_MODULE_NAME!r} from {MODEL_IMPLEMENTATION_PATH}"
+        )
     torch.set_grad_enabled(False)
 
     # Setup DDP:
@@ -57,6 +69,8 @@ def main(mode, args):
     torch.manual_seed(seed)
     torch.cuda.set_device(device)
     print(f"Starting rank={rank}, seed={seed}, world_size={dist.get_world_size()}.")
+    if rank == 0:
+        print(f"Model implementation: {MODEL_MODULE_NAME} ({MODEL_IMPLEMENTATION_PATH})")
 
     if args.ckpt is None:
         assert args.model == "SiT-XL/2", "Only SiT-XL/2 models are available for auto-download."
@@ -65,6 +79,8 @@ def main(mode, args):
         assert args.image_size == 256, "512x512 models are not yet available for auto-download." # remove this line when 512x512 models are available
         learn_sigma = args.image_size == 256
     else:
+        # train.py constructs custom checkpoints with the model default
+        # learn_sigma=True, so preserve that architecture for strict loading.
         learn_sigma = True
 
     # Load model:
@@ -123,7 +139,7 @@ def main(mode, args):
     model_string_name = args.model.replace("/", "-")
     ckpt_string_name = os.path.basename(args.ckpt).replace(".pt", "") if args.ckpt else "pretrained"
     if mode == "ODE":
-        folder_name = f"{model_string_name}-rot-head-{ckpt_string_name}-" \
+        folder_name = f"{model_string_name}-{ckpt_string_name}-" \
                   f"cfg-{args.cfg_scale}-{args.per_proc_batch_size}-"\
                   f"{mode}-{args.num_sampling_steps}-{args.sampling_method}"
     elif mode == "SDE":

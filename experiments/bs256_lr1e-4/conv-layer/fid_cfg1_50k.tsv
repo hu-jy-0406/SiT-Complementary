@@ -1,0 +1,8 @@
+step	checkpoint	status	fid	cfg	num_requested	num_png	seed	timestamp_utc
+250000	/data/nvidia/SiT-conv-layer-bs256/results-800ep/SiT-S-2-ConvLayer-bs256-lr1e-4-800ep/checkpoints/0250000.pt	ok	68.02801770968483	1.0	50000	50176	0	2026-08-12T02:49:22.920355+00:00
+500000	/data/nvidia/SiT-conv-layer-bs256/results-800ep/SiT-S-2-ConvLayer-bs256-lr1e-4-800ep/checkpoints/0500000.pt	ok	56.895089833391694	1.0	50000	50176	0	2026-08-12T16:07:49.756361+00:00
+750000	/data/nvidia/SiT-conv-layer-bs256/results-800ep/SiT-S-2-ConvLayer-bs256-lr1e-4-800ep/checkpoints/0750000.pt	ok	51.979633242087516	1.0	50000	50176	0	2026-08-13T05:38:42.872765+00:00
+1000000	/data/nvidia/SiT-conv-layer-bs256/results-800ep/SiT-S-2-ConvLayer-bs256-lr1e-4-800ep/checkpoints/1000000.pt	ok	49.241666747978115	1.0	50000	50176	0	2026-08-13T19:10:04.964165+00:00
+1250000	/data/nvidia/SiT-conv-layer-bs256/results-800ep/SiT-S-2-ConvLayer-bs256-lr1e-4-800ep/checkpoints/1250000.pt	ok	47.5775979137519	1.0	50000	50176	0	2026-08-14T08:27:28.159212+00:00
+1500000	/data/nvidia/SiT-conv-layer-bs256/results-800ep/SiT-S-2-ConvLayer-bs256-lr1e-4-800ep/checkpoints/1500000.pt	ok	46.296574099817235	1.0	50000	50176	0	2026-08-14T21:59:13.996458+00:00
+1750000	/data/nvidia/SiT-conv-layer-bs256/results-800ep/SiT-S-2-ConvLayer-bs256-lr1e-4-800ep/checkpoints/1750000.pt	ok	45.23863928744123	1.0	50000	50176	0	2026-08-15T11:18:22.287188+00:00

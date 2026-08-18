@@ -19,6 +19,12 @@ This repository contains:
 * ⚡️ Pre-trained class-conditional SiT models trained on ImageNet 256x256
 * 🛸 A SiT [training script](train.py) using PyTorch DDP
 
+This fork includes three SiT-S/2 implementations (Base, Rotation-layer, and
+Conv-layer), portable checkpoint resume support, periodic CFG=1 FID evaluation,
+and W&B logging. See the [experiment summary](docs/EXPERIMENT_RESULTS.md) for
+the backed-up results and the [deployment/resume guide](docs/RESUME_GUIDE.md)
+for moving the experiments to another server.
+
 ## Setup
 
 First, download and set up the repo:
@@ -165,5 +171,4 @@ versus 2.06 in the paper).
 
 ## License
 This project is under the MIT license. See [LICENSE](LICENSE.txt) for details.
-
 

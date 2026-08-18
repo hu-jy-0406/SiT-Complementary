@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="100%" height="100%" fill="#f8fafc"/>
+<rect x="55" y="45" width="1490" height="810" rx="22" fill="white" stroke="#dbe3ee" stroke-width="2"/>
+<text x="125" y="95" font-family="DejaVu Sans" font-size="34" font-weight="700" fill="#0f172a">SiT-S/2 ImageNet 256: FID vs Training Progress</text>
+<text x="125" y="130" font-family="DejaVu Sans" font-size="19" fill="#475569">CFG=1 · PyTorch-FID · 50,176 images · global batch 256 · lr 1e-4 · lower is better</text>
+<rect x="125" y="150" width="1415" height="635" fill="white" stroke="#94a3b8" stroke-width="2"/>
+<line x1="125.00" y1="150" x2="125.00" y2="785" stroke="#e2e8f0"/>
+<text x="125.00" y="817" text-anchor="middle" font-family="DejaVu Sans" font-size="16" fill="#475569">0</text>
+<line x1="301.88" y1="150" x2="301.88" y2="785" stroke="#e2e8f0"/>
+<text x="301.88" y="817" text-anchor="middle" font-family="DejaVu Sans" font-size="16" fill="#475569">100</text>
+<line x1="478.75" y1="150" x2="478.75" y2="785" stroke="#e2e8f0"/>
+<text x="478.75" y="817" text-anchor="middle" font-family="DejaVu Sans" font-size="16" fill="#475569">200</text>
+<line x1="655.62" y1="150" x2="655.62" y2="785" stroke="#e2e8f0"/>
+<text x="655.62" y="817" text-anchor="middle" font-family="DejaVu Sans" font-size="16" fill="#475569">300</text>
+<line x1="832.50" y1="150" x2="832.50" y2="785" stroke="#e2e8f0"/>
+<text x="832.50" y="817" text-anchor="middle" font-family="DejaVu Sans" font-size="16" fill="#475569">400</text>
+<line x1="1009.38" y1="150" x2="1009.38" y2="785" stroke="#e2e8f0"/>
+<text x="1009.38" y="817" text-anchor="middle" font-family="DejaVu Sans" font-size="16" fill="#475569">500</text>
+<line x1="1186.25" y1="150" x2="1186.25" y2="785" stroke="#e2e8f0"/>
+<text x="1186.25" y="817" text-anchor="middle" font-family="DejaVu Sans" font-size="16" fill="#475569">600</text>
+<line x1="1363.12" y1="150" x2="1363.12" y2="785" stroke="#e2e8f0"/>
+<text x="1363.12" y="817" text-anchor="middle" font-family="DejaVu Sans" font-size="16" fill="#475569">700</text>
+<line x1="1540.00" y1="150" x2="1540.00" y2="785" stroke="#e2e8f0"/>
+<text x="1540.00" y="817" text-anchor="middle" font-family="DejaVu Sans" font-size="16" fill="#475569">800</text>
+<line x1="125" y1="785.00" x2="1540" y2="785.00" stroke="#e2e8f0"/>
+<text x="107" y="791.00" text-anchor="end" font-family="DejaVu Sans" font-size="16" fill="#475569">35</text>
+<line x1="125" y1="705.62" x2="1540" y2="705.62" stroke="#e2e8f0"/>
+<text x="107" y="711.62" text-anchor="end" font-family="DejaVu Sans" font-size="16" fill="#475569">40</text>
+<line x1="125" y1="626.25" x2="1540" y2="626.25" stroke="#e2e8f0"/>
+<text x="107" y="632.25" text-anchor="end" font-family="DejaVu Sans" font-size="16" fill="#475569">45</text>
+<line x1="125" y1="546.88" x2="1540" y2="546.88" stroke="#e2e8f0"/>
+<text x="107" y="552.88" text-anchor="end" font-family="DejaVu Sans" font-size="16" fill="#475569">50</text>
+<line x1="125" y1="467.50" x2="1540" y2="467.50" stroke="#e2e8f0"/>
+<text x="107" y="473.50" text-anchor="end" font-family="DejaVu Sans" font-size="16" fill="#475569">55</text>
+<line x1="125" y1="388.12" x2="1540" y2="388.12" stroke="#e2e8f0"/>
+<text x="107" y="394.12" text-anchor="end" font-family="DejaVu Sans" font-size="16" fill="#475569">60</text>
+<line x1="125" y1="308.75" x2="1540" y2="308.75" stroke="#e2e8f0"/>
+<text x="107" y="314.75" text-anchor="end" font-family="DejaVu Sans" font-size="16" fill="#475569">65</text>
+<line x1="125" y1="229.38" x2="1540" y2="229.38" stroke="#e2e8f0"/>
+<text x="107" y="235.38" text-anchor="end" font-family="DejaVu Sans" font-size="16" fill="#475569">70</text>
+<line x1="125" y1="150.00" x2="1540" y2="150.00" stroke="#e2e8f0"/>
+<text x="107" y="156.00" text-anchor="end" font-family="DejaVu Sans" font-size="16" fill="#475569">75</text>
+<text x="832.50" y="859" text-anchor="middle" font-family="DejaVu Sans" font-size="18" fill="#334155">Training epoch (5,004 steps/epoch)</text>
+<text x="35" y="467.50" text-anchor="middle" transform="rotate(-90 35 467.50)" font-family="DejaVu Sans" font-size="18" fill="#334155">PyTorch FID</text>
+<polyline points="478.47,573.97 496.14,578.33 513.81,586.93 531.49,592.77 549.16,598.98 566.83,603.79 584.51,611.64 602.18,612.10 619.85,617.65 637.53,624.40 655.20,626.84 672.87,628.75 690.55,631.95 708.22,638.35 725.89,639.97 743.57,645.81 761.24,647.71 778.91,651.51 796.59,654.53 814.26,659.24 831.93,661.04 849.61,663.19 867.28,666.83 884.95,665.89 902.63,670.58 920.30,672.43 937.97,674.66 955.65,678.19 973.32,678.87 990.99,682.81 1008.67,681.14 1026.34,684.51 1044.01,688.28 1061.69,689.04 1079.36,689.96 1097.03,691.58 1114.71,693.02 1132.38,698.82 1150.05,698.91 1167.73,696.92 1185.40,698.18 1203.08,701.52 1220.75,702.24 1238.42,701.84 1273.77,708.83 1362.14,712.35 1450.50,718.89 1538.87,723.55" fill="none" stroke="#2563eb" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="478.47" cy="573.97" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="496.14" cy="578.33" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="513.81" cy="586.93" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="531.49" cy="592.77" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="549.16" cy="598.98" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="566.83" cy="603.79" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="584.51" cy="611.64" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="602.18" cy="612.10" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="619.85" cy="617.65" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="637.53" cy="624.40" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="655.20" cy="626.84" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="672.87" cy="628.75" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="690.55" cy="631.95" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="708.22" cy="638.35" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="725.89" cy="639.97" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="743.57" cy="645.81" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="761.24" cy="647.71" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="778.91" cy="651.51" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="796.59" cy="654.53" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="814.26" cy="659.24" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="831.93" cy="661.04" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="849.61" cy="663.19" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="867.28" cy="666.83" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="884.95" cy="665.89" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="902.63" cy="670.58" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="920.30" cy="672.43" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="937.97" cy="674.66" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="955.65" cy="678.19" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="973.32" cy="678.87" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="990.99" cy="682.81" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1008.67" cy="681.14" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1026.34" cy="684.51" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1044.01" cy="688.28" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1061.69" cy="689.04" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1079.36" cy="689.96" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1097.03" cy="691.58" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1114.71" cy="693.02" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1132.38" cy="698.82" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1150.05" cy="698.91" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1167.73" cy="696.92" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1185.40" cy="698.18" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1203.08" cy="701.52" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1220.75" cy="702.24" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1238.42" cy="701.84" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1273.77" cy="708.83" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1362.14" cy="712.35" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1450.50" cy="718.89" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1538.87" cy="723.55" r="3" fill="white" stroke="#2563eb" stroke-width="3"/>
+<polyline points="213.37,262.41 301.73,435.59 390.10,508.12 478.47,552.51 478.75,552.63 566.83,585.11 655.20,603.32 743.57,620.43 831.93,634.70 920.30,646.88 1008.67,657.70 1097.03,669.00 1185.40,675.64 1273.77,682.59 1362.14,688.79 1450.50,695.53 1538.87,701.28" fill="none" stroke="#dc2626" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="213.37" cy="262.41" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="301.73" cy="435.59" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="390.10" cy="508.12" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="478.47" cy="552.51" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="478.75" cy="552.63" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="566.83" cy="585.11" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="655.20" cy="603.32" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="743.57" cy="620.43" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="831.93" cy="634.70" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="920.30" cy="646.88" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="1008.67" cy="657.70" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="1097.03" cy="669.00" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="1185.40" cy="675.64" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="1273.77" cy="682.59" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="1362.14" cy="688.79" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="1450.50" cy="695.53" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<circle cx="1538.87" cy="701.28" r="4" fill="white" stroke="#dc2626" stroke-width="3"/>
+<polyline points="213.37,260.68 301.73,437.42 390.10,515.45 478.47,558.91 566.83,585.33 655.20,605.67 743.57,622.46" fill="none" stroke="#059669" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="213.37" cy="260.68" r="4" fill="white" stroke="#059669" stroke-width="3"/>
+<circle cx="301.73" cy="437.42" r="4" fill="white" stroke="#059669" stroke-width="3"/>
+<circle cx="390.10" cy="515.45" r="4" fill="white" stroke="#059669" stroke-width="3"/>
+<circle cx="478.47" cy="558.91" r="4" fill="white" stroke="#059669" stroke-width="3"/>
+<circle cx="566.83" cy="585.33" r="4" fill="white" stroke="#059669" stroke-width="3"/>
+<circle cx="655.20" cy="605.67" r="4" fill="white" stroke="#059669" stroke-width="3"/>
+<circle cx="743.57" cy="622.46" r="4" fill="white" stroke="#059669" stroke-width="3"/>
+<rect x="1095" y="172" width="425" height="158" rx="12" fill="white" stroke="#cbd5e1" stroke-width="2"/>
+<line x1="1115" y1="193" x2="1163" y2="193" stroke="#2563eb" stroke-width="5"/>
+<circle cx="1139" cy="193" r="4" fill="white" stroke="#2563eb" stroke-width="2"/>
+<text x="1177" y="199" font-family="DejaVu Sans" font-size="17" font-weight="700" fill="#1e293b">Base · latest 38.871 @ 799.4 ep</text>
+<line x1="1115" y1="237" x2="1163" y2="237" stroke="#dc2626" stroke-width="5"/>
+<circle cx="1139" cy="237" r="4" fill="white" stroke="#dc2626" stroke-width="2"/>
+<text x="1177" y="243" font-family="DejaVu Sans" font-size="17" font-weight="700" fill="#1e293b">Rotation-layer · latest 40.274 @ 799.4 ep</text>
+<line x1="1115" y1="281" x2="1163" y2="281" stroke="#059669" stroke-width="5"/>
+<circle cx="1139" cy="281" r="4" fill="white" stroke="#059669" stroke-width="2"/>
+<text x="1177" y="287" font-family="DejaVu Sans" font-size="17" font-weight="700" fill="#1e293b">Conv-layer · latest 45.239 @ 349.7 ep</text>
+</svg>
