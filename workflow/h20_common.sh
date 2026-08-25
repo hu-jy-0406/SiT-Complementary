@@ -4,6 +4,50 @@
 # launchers.  Full cryptographic verification is performed by prepare_assets.py
 # before these ready markers are written.
 
+handoff_validate_gpu_profile() {
+    local profile="$1"
+    case "$profile" in
+        a100-40gb|h20) ;;
+        *)
+            echo "GPU_PROFILE must be a100-40gb or h20, got: $profile" >&2
+            return 2
+            ;;
+    esac
+}
+
+handoff_default_slurm_gres() {
+    local profile="$1"
+    handoff_validate_gpu_profile "$profile"
+    case "$profile" in
+        a100-40gb) printf '%s\n' 'gpu:a100:8' ;;
+        h20) printf '%s\n' 'gpu:h20:8' ;;
+    esac
+}
+
+handoff_lock_gpu_profile() {
+    local output_root="$1"
+    local profile="$2"
+    handoff_validate_gpu_profile "$profile"
+    mkdir -p "$output_root"
+    local marker="$output_root/.gpu_profile"
+    if [[ ! -e "$marker" ]]; then
+        (
+            set -o noclobber
+            printf '%s\n' "$profile" >"$marker"
+        ) 2>/dev/null || true
+    fi
+    if [[ ! -f "$marker" ]]; then
+        echo "GPU profile marker is not a regular file: $marker" >&2
+        return 1
+    fi
+    local recorded=""
+    IFS= read -r recorded <"$marker" || true
+    if [[ "$recorded" != "$profile" ]]; then
+        echo "OUTPUT_ROOT is locked to GPU_PROFILE=$recorded, not $profile: $output_root" >&2
+        return 1
+    fi
+}
+
 H20_CONV_TARGETS=(
     2000000 2250000 2500000 2750000 3000000
     3250000 3500000 3750000 4000000 4003200

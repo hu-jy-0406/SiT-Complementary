@@ -9,7 +9,35 @@ from unittest import mock
 
 import torch
 
-from workflow import build_results, evaluate_checkpoint
+from workflow import build_results, evaluate_checkpoint, preflight
+
+
+class PreflightGpuProfileTest(unittest.TestCase):
+    def test_accepts_supported_eight_gpu_profiles(self):
+        preflight.validate_gpu_profile(
+            ["NVIDIA A100-SXM4-40GB"] * 8,
+            [39.5] * 8,
+            "a100-40gb",
+        )
+        preflight.validate_gpu_profile(
+            ["NVIDIA H20"] * 8,
+            [95.0] * 8,
+            "h20",
+        )
+
+    def test_rejects_wrong_model_or_memory_tier(self):
+        with self.assertRaisesRegex(RuntimeError, "does not match"):
+            preflight.validate_gpu_profile(
+                ["NVIDIA H20"] * 8,
+                [95.0] * 8,
+                "a100-40gb",
+            )
+        with self.assertRaisesRegex(RuntimeError, "visible memory"):
+            preflight.validate_gpu_profile(
+                ["NVIDIA A100-SXM4-80GB"] * 8,
+                [79.2] * 8,
+                "a100-40gb",
+            )
 
 
 class EvaluateCheckpointTest(unittest.TestCase):
@@ -265,14 +293,25 @@ class BuildResultsTest(unittest.TestCase):
             self.populate_complete(output, storage)
 
             return_code = build_results.main(
-                ["--output-dir", str(output), "--strict"]
+                [
+                    "--output-dir",
+                    str(output),
+                    "--gpu-profile",
+                    "a100-40gb",
+                    "--strict",
+                ]
             )
             self.assertEqual(return_code, 0)
             summary = json.loads((output / "training_results.json").read_text())
             self.assertEqual(summary["status"], "COMPLETE")
             self.assertTrue(summary["models"]["conv"]["resume_baseline_complete"])
+            self.assertEqual(
+                summary["training_protocol"]["gpu_topology"],
+                "8x NVIDIA A100 40GB",
+            )
             report = (output / "TRAINING_RESULTS.md").read_text()
             self.assertIn("SHA-256", report)
+            self.assertIn("8×NVIDIA A100 40GB", report)
             for filename in build_results.OUTPUT_FILES:
                 self.assertTrue((output / filename).is_file(), filename)
 

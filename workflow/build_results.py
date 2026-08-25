@@ -39,6 +39,16 @@ VARIANT_COLORS = {
     "conv": "#1f77b4",
     "rotation-head": "#d62728",
 }
+GPU_PROFILE_METADATA = {
+    "a100-40gb": {
+        "json_topology": "8x NVIDIA A100 40GB",
+        "markdown_topology": "8×NVIDIA A100 40GB",
+    },
+    "h20": {
+        "json_topology": "8x NVIDIA H20",
+        "markdown_topology": "8×NVIDIA H20",
+    },
+}
 
 RECORD_SCHEMA = "sit-fid-evaluation-v1"
 PROTOCOL_ID = "sit-imagenet256-pytorch-fid-euler250-seed0-padded50176-v1"
@@ -1116,7 +1126,8 @@ def _markdown_report(summary: dict[str, Any]) -> str:
             "| Field | Value |",
             "| --- | --- |",
             "| Model | `SiT-S/2`, ImageNet 256×256 |",
-            "| Topology | 8×NVIDIA H20, global batch 256, per-GPU batch 32 |",
+            f"| Topology | {summary['training_protocol']['markdown_topology']}, "
+            "global batch 256, per-GPU batch 32 |",
             "| Optimizer | AdamW, LR `1e-4`, weight decay 0, default betas |",
             "| Duration | 800 epochs / 4,003,200 optimizer steps |",
             "| Transport / VAE / seed | Linear velocity / SD VAE EMA / 0 |",
@@ -1154,7 +1165,8 @@ def _markdown_report(summary: dict[str, Any]) -> str:
             "",
             "## CFG=1 training curves",
             "",
-            "The Conv curve covers the resumed H20 interval. Any merged legacy points "
+            "The Conv curve covers the resumed interval produced by this workflow. "
+            "Any merged legacy points "
             "are visually distinguished from measurements produced by this workflow. "
             "No missing point is interpolated.",
             "",
@@ -1808,6 +1820,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--periodic-end", type=int, default=PERIODIC_END)
     parser.add_argument("--periodic-interval", type=int, default=PERIODIC_INTERVAL)
     parser.add_argument("--final-step", type=int, default=FINAL_STEP)
+    parser.add_argument(
+        "--gpu-profile",
+        choices=sorted(GPU_PROFILE_METADATA),
+        default="h20",
+        help="Hardware profile used for this eight-rank training run.",
+    )
     return parser.parse_args(argv)
 
 
@@ -1826,6 +1844,24 @@ def _strict_configuration_issues(args: argparse.Namespace) -> list[str]:
         for field, wanted in expected.items()
         if getattr(args, field) != wanted
     ]
+
+
+def _gpu_profile_marker_issues(args: argparse.Namespace) -> list[str]:
+    marker = args.output_dir.resolve().parent / ".gpu_profile"
+    if not marker.exists():
+        return []
+    if not marker.is_file():
+        return [f"GPU profile marker is not a regular file: {marker}"]
+    try:
+        recorded = marker.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        return [f"cannot read GPU profile marker {marker}: {exc}"]
+    if recorded != args.gpu_profile:
+        return [
+            f"GPU profile mismatch: {marker} records {recorded!r}, but "
+            f"--gpu-profile is {args.gpu_profile!r}"
+        ]
+    return []
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1885,7 +1921,8 @@ def main(argv: list[str] | None = None) -> int:
             _validate_final_checkpoints(workflow_records, final_step=args.final_step)
         )
     issues = (
-        raw_issues
+        _gpu_profile_marker_issues(args)
+        + raw_issues
         + history_issues
         + conflicts
         + workflow_issues
@@ -1918,7 +1955,11 @@ def main(argv: list[str] | None = None) -> int:
         "training_protocol": {
             "model": "SiT-S/2",
             "dataset": "ImageNet-1K 256x256",
-            "gpu_topology": "8x NVIDIA H20",
+            "gpu_profile": args.gpu_profile,
+            "gpu_topology": GPU_PROFILE_METADATA[args.gpu_profile]["json_topology"],
+            "markdown_topology": GPU_PROFILE_METADATA[args.gpu_profile][
+                "markdown_topology"
+            ],
             "global_batch_size": 256,
             "per_gpu_batch_size": 32,
             "gradient_accumulation_steps": 1,

@@ -8,13 +8,17 @@ source workflow/h20_common.sh
 : "${IMAGENET_TRAIN:?Set IMAGENET_TRAIN before submitting}"
 : "${OUTPUT_ROOT:?Set OUTPUT_ROOT before submitting}"
 asset_root="${ASSET_ROOT:-$OUTPUT_ROOT/assets}"
+export GPU_PROFILE="${GPU_PROFILE:-a100-40gb}"
+handoff_validate_gpu_profile "$GPU_PROFILE"
+handoff_lock_gpu_profile "$OUTPUT_ROOT" "$GPU_PROFILE"
 
 partition_args=()
 [[ -n "${SLURM_PARTITION:-}" ]] && partition_args+=(--partition "$SLURM_PARTITION")
 [[ -n "${SLURM_ACCOUNT:-}" ]] && partition_args+=(--account "$SLURM_ACCOUNT")
 [[ -n "${SLURM_QOS:-}" ]] && partition_args+=(--qos "$SLURM_QOS")
 [[ -n "${SLURM_TIME:-}" ]] && partition_args+=(--time "$SLURM_TIME")
-gres="${SLURM_GRES:-gpu:h20:8}"
+default_gres="$(handoff_default_slurm_gres "$GPU_PROFILE")"
+gres="${SLURM_GRES:-$default_gres}"
 
 previous="${SLURM_AFTEROK_JOB_ID:-}"
 if [[ -n "$previous" && ! "$previous" =~ ^[0-9]+$ ]]; then
@@ -63,7 +67,7 @@ submit_stage() {
         --gres "$gres" \
         "${partition_args[@]}" \
         "${dependency_args[@]}" \
-        --export="ALL,PIPELINE_VARIANT=$variant,PIPELINE_TARGET=$target,PREPARE_ASSETS=$prepare" \
+        --export="ALL,GPU_PROFILE=$GPU_PROFILE,PIPELINE_VARIANT=$variant,PIPELINE_TARGET=$target,PREPARE_ASSETS=$prepare" \
         slurm/h20_stage.slurm)"
     local job_id=""
     if ! job_id="$(parse_job_id "$submission")"; then

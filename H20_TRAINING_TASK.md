@@ -1,8 +1,9 @@
-# Coding-agent task: Conv then Rotation-head on 8×H20
+# Coding-agent task: Conv then Rotation-head on eight A100/H20 GPUs
 
 This file is the execution contract for a coding agent operating a fresh clone
 of this repository. The goal is to train and evaluate two SiT-S/2 variants in
-order on one node with eight NVIDIA H20 GPUs:
+order on one node with eight NVIDIA A100 40GB GPUs (preferred), or eight NVIDIA
+H20 GPUs when A100s are unavailable:
 
 1. Resume **Conv-layer** from optimizer step 1,950,000 and finish 800 epochs.
 2. Train **Rotation-head** from random initialization for 800 epochs.
@@ -12,6 +13,9 @@ order on one node with eight NVIDIA H20 GPUs:
 Do not declare success until the strict report check passes.
 
 Canonical repository: <https://github.com/hu-jy-0406/SiT-Complementary>
+
+The historical filename `H20_TRAINING_TASK.md` is retained so existing links do
+not break; this contract now governs both supported GPU profiles.
 
 ## Detect the execution environment first
 
@@ -44,7 +48,7 @@ Interpret the result conservatively:
   FID there. Submit those operations to compute nodes.
 - `standalone`: this is only a candidate dedicated server. Confirm with the
   owner that the machine is not governed by another scheduler, inspect
-  `nvidia-smi`, and verify exclusive use of all eight H20 GPUs. Then use
+  `nvidia-smi`, and verify exclusive use of the selected eight GPUs. Then use
   **Execution option A**.
 - `undetermined`: stop and ask the server owner. This includes a partial Slurm
   installation or an installed client whose controller query failed. Never
@@ -54,12 +58,51 @@ Make this decision once per server and do not mix the direct and Slurm launch
 methods for the same active run. Site-specific paths remain environment
 variables; do not edit tracked files to configure the server.
 
+## Select exactly eight GPUs
+
+Prefer eight A100 40GB GPUs and keep the original eight-rank topology:
+
+```bash
+export GPU_PROFILE=a100-40gb
+export NPROC_PER_NODE=8
+export GLOBAL_BATCH_SIZE=256
+export GRADIENT_ACCUMULATION_STEPS=1
+```
+
+The completed Base and Rotation-layer experiments used eight A100 ranks. This
+profile keeps `world_size=8`, per-GPU batch 32, and accumulation 1. Local tests
+also showed that A100 40GB has ample memory: even per-GPU batch 64 used only
+about 11 GiB for Conv and Rotation-head. Do **not** combine all 16 A100s into a
+single 16-rank run; that would reduce the per-GPU batch, increase communication,
+and change the saved RNG/data topology.
+
+On a standalone host that physically contains 16 A100s, obtain an exclusive set
+of eight from the owner and expose only those devices before preflight, for
+example:
+
+```bash
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+```
+
+Do not guess device IDs or take GPUs used by another process. Slurm users must
+request exactly eight A100s through GRES instead of setting device IDs on the
+login node. All eight must be on one node; this handoff does not improvise a
+multi-node topology. If eight same-node A100s cannot be allocated, the supported
+fallback is:
+
+```bash
+export GPU_PROFILE=h20
+```
+
+Use a new `OUTPUT_ROOT` for each profile. The launcher records
+`$OUTPUT_ROOT/.gpu_profile` and refuses to mix A100 and H20 artifacts.
+
 ## Non-negotiable experiment protocol
 
 | Setting | Required value |
 | --- | --- |
 | Model | SiT-S/2, ImageNet 256×256 |
-| GPUs | 8 NVIDIA H20 on one node |
+| GPUs | 8 NVIDIA A100 40GB on one node; 8 H20 supported as fallback |
 | Global / per-GPU batch | 256 / 32 |
 | Gradient accumulation | 1 |
 | Optimizer | AdamW, LR `1e-4`, weight decay 0, default betas |
@@ -75,12 +118,13 @@ variables; do not edit tracked files to configure the server.
 | Metric | `pytorch-fid==0.3.0`, batch 128 |
 
 Do not enable AMP/BF16, change global batch, change the LR, add `torch.compile`,
-or alter the sampler to increase H20 utilization. Those changes would make the
-run incomparable to the completed Base and Rotation-layer experiments. The
-H20 run preserves the original eight-rank topology and optimizer semantics.
-The downloaded Conv checkpoint predates resumable RNG metadata, so its first
-H20 continuation cannot reconstruct the old A100 random stream. New checkpoints
-save Python, NumPy, CPU Torch, and current-device CUDA RNG state for every rank.
+or alter the sampler to increase accelerator utilization. Those changes would
+make the run incomparable to the completed Base and Rotation-layer experiments.
+The selected run preserves the original eight-rank topology and optimizer
+semantics. The downloaded Conv checkpoint predates resumable RNG metadata, so
+its first continuation cannot reconstruct the old A100 random stream. New
+checkpoints save Python, NumPy, CPU Torch, and current-device CUDA RNG state for
+every rank.
 Horizontal flips remain 50%, but are keyed statelessly by epoch and distributed
 sampler position so DataLoader worker scheduling and prefetch cannot change an
 augmentation after a mid-epoch restart. CUDA kernel nondeterminism and the
@@ -119,8 +163,8 @@ Do not guess these paths. Discover them safely or ask the server owner:
 
 ```bash
 export IMAGENET_TRAIN=/absolute/path/to/ILSVRC/Data/CLS-LOC/train
-export OUTPUT_ROOT=/absolute/path/to/durable/sit-complementary-h20-runs
-export ASSET_ROOT=/absolute/path/to/durable/sit-complementary-h20-assets
+export OUTPUT_ROOT=/absolute/path/to/durable/sit-complementary-a100-runs
+export ASSET_ROOT=/absolute/path/to/durable/sit-complementary-assets
 ```
 
 `IMAGENET_TRAIN` must be an ImageFolder with exactly 1,000 class directories
@@ -159,7 +203,7 @@ ready markers under `$ASSET_ROOT`.
 ## Required preflight
 
 Run this inside a legitimate Slurm allocation when `EXECUTION_MODE=slurm`, or
-on the confirmed dedicated H20 server when `EXECUTION_MODE=standalone`. Never
+on the confirmed dedicated GPU server when `EXECUTION_MODE=standalone`. Never
 run it on a shared login node:
 
 For the Slurm branch, `slurm/submit_h20_pipeline.sh` schedules these same checks
@@ -177,26 +221,28 @@ python workflow/prewarm.py --asset-root "$ASSET_ROOT"
 python workflow/preflight.py \
   --imagenet-train "$IMAGENET_TRAIN" \
   --output-root "$OUTPUT_ROOT" \
+  --gpu-profile "$GPU_PROFILE" \
   --require-clean-git
 ```
 
-Proceed only after `PREFLIGHT_PASS`. It verifies eight visible H20s, NCCL,
-ImageNet contents, dependencies, batch arithmetic, and disk space. Also inspect
-`nvidia-smi` and ensure the eight GPUs are assigned to this job and not used by
+Proceed only after `PREFLIGHT_PASS`. It verifies exactly eight visible GPUs of
+the selected profile (including the A100 40GB memory tier), NCCL, ImageNet
+contents, dependencies, batch arithmetic, and disk space. Also inspect
+`nvidia-smi` and ensure those GPUs are assigned to this job and not used by
 another process. The Git worktree must be clean so every FID shard can record
 one unambiguous source commit; commit any necessary site adaptation first.
 
 The pipeline then runs `workflow/smoke_h20.sh`: one real 8-rank Conv resume
 optimizer step and one real 8-rank Rotation-head optimizer step at the fixed
-batch configuration. Long training starts only after `.h20_smoke_passed` is
-written under `OUTPUT_ROOT`.
+batch configuration. Long training starts only after the profile-specific
+`.gpu_smoke_passed-$GPU_PROFILE` marker is written under `OUTPUT_ROOT`.
 
 ## Execution option A: standalone dedicated server
 
 Use this option only when scheduler detection returned `standalone` and the
-server owner confirmed exclusive access to all eight H20 GPUs. Because the full
-workflow runs for multiple weeks, do not leave it attached only to an SSH or
-coding-agent session. Use the server's persistent process manager (`systemd`,
+server owner confirmed exclusive access to the selected eight GPUs. Because the
+full workflow runs for multiple weeks, do not leave it attached only to an SSH
+or coding-agent session. Use the server's persistent process manager (`systemd`,
 `tmux`, or an equivalent facility) when available. A portable `nohup` fallback
 is shown below.
 
@@ -248,9 +294,14 @@ export SLURM_PARTITION=your_gpu_partition
 # export SLURM_ACCOUNT=your_account
 # export SLURM_QOS=your_qos
 # export SLURM_TIME=2-00:00:00  # override the one-day stage default if allowed
-export SLURM_GRES=gpu:h20:8   # use gpu:8 if the cluster has no typed GRES
+export GPU_PROFILE=a100-40gb
+export SLURM_GRES=gpu:a100:8  # use the exact A100 GRES reported by this site
+# H20 fallback: GPU_PROFILE=h20 and SLURM_GRES=gpu:h20:8
 bash slurm/submit_h20_pipeline.sh
 ```
+
+If the cluster exposes only an untyped resource, the owner may specify
+`SLURM_GRES=gpu:8`. Never request 16 A100s for this handoff.
 
 The submitter inspects durable checkpoint/evaluation artifacts and queues only
 missing stages. Re-run it after a failure to resume the chain. If it must join
@@ -262,8 +313,10 @@ Submit from an activated Conda environment with `--export=ALL` support. If the
 site limits the number of queued jobs, submit only the next stage manually:
 
 ```bash
-sbatch --gres=gpu:h20:8 \
-  --export=ALL,PIPELINE_VARIANT=conv,PIPELINE_TARGET=2000000,PREPARE_ASSETS=1 \
+stage_exports=ALL,GPU_PROFILE=a100-40gb,PIPELINE_VARIANT=conv,\
+PIPELINE_TARGET=2000000,PREPARE_ASSETS=1
+sbatch --gres=gpu:a100:8 \
+  --export="$stage_exports" \
   slurm/h20_stage.slurm
 ```
 
@@ -278,7 +331,7 @@ evaluation point.
 - New checkpoints contain per-rank Python, NumPy, CPU Torch, and CUDA RNG state.
   Restoring those streams requires the same eight-rank topology. Stateless
   horizontal flips make resume independent of DataLoader worker prefetch.
-- The old Conv step-1,950,000 checkpoint has no RNG state. Its first H20 segment
+- The old Conv step-1,950,000 checkpoint has no RNG state. Its first new segment
   is reproducible from the fixed seed but cannot recover the exact preceding
   A100 stream; every checkpoint newly written by this workflow is restartable.
 - A restarted stage scans and validates the latest checkpoint below its target.
@@ -312,6 +365,7 @@ Run the strict check explicitly if needed:
 python workflow/build_results.py \
   --output-dir "$OUTPUT_ROOT/training_results" \
   --conv-history "$ASSET_ROOT/huggingface/BlueSourceJY/SiT-Complementary/experiments/bs256_lr1e-4/conv-layer/fid_cfg1_50k.tsv" \
+  --gpu-profile "$GPU_PROFILE" \
   --strict
 ```
 

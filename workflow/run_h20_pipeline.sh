@@ -11,6 +11,9 @@ source workflow/h20_common.sh
 export NPROC_PER_NODE="${NPROC_PER_NODE:-8}"
 export GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-256}"
 export GRADIENT_ACCUMULATION_STEPS="${GRADIENT_ACCUMULATION_STEPS:-1}"
+export GPU_PROFILE="${GPU_PROFILE:-a100-40gb}"
+handoff_validate_gpu_profile "$GPU_PROFILE"
+handoff_lock_gpu_profile "$OUTPUT_ROOT" "$GPU_PROFILE"
 export ASSET_ROOT="${ASSET_ROOT:-$OUTPUT_ROOT/assets}"
 export SIT_VAE_ROOT="$ASSET_ROOT/vae"
 export TORCH_HOME="$ASSET_ROOT/cache/torch"
@@ -41,6 +44,7 @@ python workflow/preflight.py \
     --nproc "$NPROC_PER_NODE" \
     --global-batch-size "$GLOBAL_BATCH_SIZE" \
     --gradient-accumulation-steps "$GRADIENT_ACCUMULATION_STEPS" \
+    --gpu-profile "$GPU_PROFILE" \
     --require-clean-git
 bash workflow/smoke_h20.sh
 
@@ -72,4 +76,4 @@ for target in "${rotation_head_periodic_targets[@]}"; do
 done
 EVALUATE_ONLY=1 bash workflow/run_h20_stage.sh rotation-head 4003200
 
-echo "H20_PIPELINE_COMPLETE=$OUTPUT_ROOT/training_results/TRAINING_RESULTS.md"
+echo "GPU_PIPELINE_COMPLETE=$OUTPUT_ROOT/training_results/TRAINING_RESULTS.md"

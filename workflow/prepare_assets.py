@@ -1,4 +1,4 @@
-"""Download and verify every non-ImageNet asset needed by the H20 workflow."""
+"""Download and verify every non-ImageNet asset needed by the GPU workflow."""
 
 import argparse
 import hashlib

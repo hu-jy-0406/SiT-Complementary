@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cheaply determine whether one restart-safe H20 stage is already complete."""
+"""Cheaply determine whether one restart-safe GPU stage is already complete."""
 
 from __future__ import annotations
 

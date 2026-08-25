@@ -25,6 +25,9 @@ training_root="$OUTPUT_ROOT/training"
 nproc="${NPROC_PER_NODE:-8}"
 global_batch="${GLOBAL_BATCH_SIZE:-256}"
 accumulation="${GRADIENT_ACCUMULATION_STEPS:-1}"
+gpu_profile="${GPU_PROFILE:-a100-40gb}"
+handoff_validate_gpu_profile "$gpu_profile"
+handoff_lock_gpu_profile "$OUTPUT_ROOT" "$gpu_profile"
 final_step=4003200
 
 if [[ "$nproc" != "8" || "$global_batch" != "256" || "$accumulation" != "1" ]]; then
@@ -46,7 +49,7 @@ fid_reference="$asset_root/fid/VIRTUAL_imagenet256_labeled.npz"
 
 if [[ "${TRAIN_ONLY:-0}" != "1" && "${EVALUATE_ONLY:-0}" != "1" ]] && \
     h20_stage_complete "$variant" "$target" "$OUTPUT_ROOT" "$asset_root"; then
-    echo "H20_STAGE_ALREADY_COMPLETE variant=$variant target=$target"
+    echo "GPU_STAGE_ALREADY_COMPLETE variant=$variant target=$target"
     exit 0
 fi
 
@@ -77,6 +80,7 @@ if [[ "${SKIP_PREFLIGHT:-0}" != "1" ]]; then
         --nproc "$nproc" \
         --global-batch-size "$global_batch" \
         --gradient-accumulation-steps "$accumulation" \
+        --gpu-profile "$gpu_profile" \
         --require-clean-git
 fi
 
@@ -195,7 +199,7 @@ else
 fi
 
 if [[ "${TRAIN_ONLY:-0}" == "1" ]]; then
-    echo "H20_TRAINING_COMPLETE variant=$variant target=$target"
+    echo "GPU_TRAINING_COMPLETE variant=$variant target=$target"
     exit 0
 fi
 
@@ -217,7 +221,11 @@ if [[ ! -f "$conv_history" ]]; then
     echo "Pinned Conv FID history is missing: $conv_history" >&2
     exit 1
 fi
-build_args=(--output-dir "$result_root" --conv-history "$conv_history")
+build_args=(
+    --output-dir "$result_root"
+    --conv-history "$conv_history"
+    --gpu-profile "$gpu_profile"
+)
 python workflow/build_results.py "${build_args[@]}"
 if [[ "$variant" == "rotation-head" && "$target" == "$final_step" ]]; then
     python workflow/build_results.py "${build_args[@]}" --strict
@@ -233,4 +241,4 @@ if ! h20_stage_complete "$variant" "$target" "$OUTPUT_ROOT" "$asset_root"; then
     exit 1
 fi
 
-echo "H20_STAGE_COMPLETE variant=$variant target=$target"
+echo "GPU_STAGE_COMPLETE variant=$variant target=$target"

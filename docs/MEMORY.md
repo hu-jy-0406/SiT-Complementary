@@ -27,17 +27,24 @@ This file records durable project context that should remain available across ta
 ## Decisions
 
 - 2026-08-25: Created this file as the durable project-memory record.
-- 2026-08-25: Added the portable 8×H20 Conv→Rotation-head handoff specified by
-  `H20_TRAINING_TASK.md`. The handoff pins and verifies remote assets, preserves
-  global batch 256 on eight ranks, and strictly generates Markdown/JSON/TSV/PNG
-  results. On a dedicated node each model trains continuously before its saved
-  periodic checkpoints are evaluated; Slurm stages remain restartable.
+- 2026-08-25: Added the portable eight-GPU Conv→Rotation-head handoff specified
+  by `H20_TRAINING_TASK.md`. The handoff pins and verifies remote assets,
+  preserves global batch 256 on eight ranks, and strictly generates
+  Markdown/JSON/TSV/PNG results. On a dedicated node each model trains
+  continuously before its saved periodic checkpoints are evaluated; Slurm
+  stages remain restartable.
 - 2026-08-25: New Conv/Rotation-head checkpoints save per-rank Python, NumPy,
-  CPU Torch, and CUDA RNG state. The H20 workflow uses stateless 50% horizontal
+  CPU Torch, and CUDA RNG state. The workflow uses stateless 50% horizontal
   flips keyed by epoch and sampler position so mid-epoch DataLoader resume does
   not depend on worker prefetch. The legacy Conv step-1,950,000 checkpoint has
-  no RNG metadata, so its first H20 continuation cannot reconstruct the old
+  no RNG metadata, so its first continuation cannot reconstruct the old
   A100 random stream.
+- 2026-08-25: The handoff now prefers eight A100 40GB GPUs and supports eight
+  H20 GPUs as a fallback through `GPU_PROFILE=a100-40gb|h20`. Use only eight of
+  an available 16-card A100 pool: `world_size=8`, global batch 256, per-GPU
+  batch 32, and accumulation 1 preserve the original training topology. A100
+  40GB is sufficient (the verified batch-64 Conv/Rotation-head runs used about
+  11 GiB per GPU). Each `OUTPUT_ROOT` is locked to one GPU profile.
 
 ## Current Work
 

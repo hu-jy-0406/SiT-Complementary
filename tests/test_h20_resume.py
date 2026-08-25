@@ -11,6 +11,36 @@ from unittest import mock
 from workflow import prepare_assets, stage_status
 
 
+class GpuProfileLockTest(unittest.TestCase):
+    def test_output_root_cannot_mix_gpu_profiles(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            command = (
+                'source workflow/h20_common.sh; '
+                'handoff_lock_gpu_profile "$1" "$2"'
+            )
+            subprocess.run(
+                ["bash", "-c", command, "bash", str(output), "a100-40gb"],
+                cwd=repo_root,
+                check=True,
+            )
+            subprocess.run(
+                ["bash", "-c", command, "bash", str(output), "a100-40gb"],
+                cwd=repo_root,
+                check=True,
+            )
+            rejected = subprocess.run(
+                ["bash", "-c", command, "bash", str(output), "h20"],
+                cwd=repo_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("locked to GPU_PROFILE=a100-40gb", rejected.stderr)
+
+
 class LocalAssetReuseTest(unittest.TestCase):
     def test_verified_local_asset_never_calls_downloader(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -301,6 +331,8 @@ class SlurmSubmitterTest(unittest.TestCase):
             self.assertEqual(len(submitted), 26)
             self.assertIn("SKIPPED_COMPLETE variant=conv target=2000000", completed.stdout)
             self.assertIn("PREPARE_ASSETS=1", submitted[0])
+            self.assertIn("--gres gpu:a100:8", submitted[0])
+            self.assertIn("GPU_PROFILE=a100-40gb", submitted[0])
             self.assertTrue(all("PREPARE_ASSETS=0" in line for line in submitted[1:]))
             self.assertIn("afterok:1001", submitted[1])
             self.assertNotIn("test-cluster", "\n".join(submitted))

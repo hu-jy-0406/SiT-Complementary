@@ -3,14 +3,17 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+source workflow/h20_common.sh
 : "${IMAGENET_TRAIN:?Set IMAGENET_TRAIN}"
 : "${OUTPUT_ROOT:?Set OUTPUT_ROOT}"
 
 asset_root="${ASSET_ROOT:-$OUTPUT_ROOT/assets}"
+gpu_profile="${GPU_PROFILE:-a100-40gb}"
+handoff_validate_gpu_profile "$gpu_profile"
 conv_source="$asset_root/huggingface/BlueSourceJY/SiT-Complementary/checkpoints/bs256_lr1e-4/conv-layer/1950000.pt"
-marker="$OUTPUT_ROOT/.h20_smoke_passed"
+marker="$OUTPUT_ROOT/.gpu_smoke_passed-$gpu_profile"
 if [[ -f "$marker" ]]; then
-    echo "H20_SMOKE_ALREADY_PASSED=$marker"
+    echo "GPU_SMOKE_ALREADY_PASSED=$marker"
     exit 0
 fi
 
@@ -55,4 +58,4 @@ python workflow/checkpoint_tool.py inspect \
     "$smoke_dir/rotation-head/smoke-rotation-head/checkpoints/0000001.pt" | grep -qx 1
 
 touch "$marker"
-echo "H20_SMOKE_PASS=$marker"
+echo "GPU_SMOKE_PASS=$marker"
