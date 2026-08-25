@@ -47,11 +47,18 @@ This file records durable project context that should remain available across ta
   11 GiB per GPU). Each `OUTPUT_ROOT` is locked to one GPU profile.
 - 2026-08-25: The external handoff supports two concurrent 8×A100 40GB nodes:
   run Conv on one node and Rotation-head on the other, never one 16-rank job.
-  A coding-agent prompt selects exactly `conv` or `rotation-head`. Both agents
-  must use the same absolute shared `OUTPUT_ROOT` and `ASSET_ROOT`; locked asset
-  preparation and report finalization prevent cross-node races. The first
-  experiment leaves `JOINT_RESULTS_PENDING`, and the second produces the strict
-  combined report automatically.
+  A coding-agent prompt selects exactly `conv` or `rotation-head`. In the
+  shared-storage layout both agents use the same absolute `OUTPUT_ROOT` and
+  `ASSET_ROOT`; locked asset preparation and report finalization prevent races.
+  The first experiment leaves `JOINT_RESULTS_PENDING`, and the second produces
+  the strict combined report automatically.
+- 2026-08-25: The two A100 machines need not share a Slurm controller or a
+  filesystem. Each execution endpoint is classified independently. With
+  isolated storage, each completed experiment exports a SHA-256-verified
+  portable directory containing its final checkpoint and FID records; a CPU
+  coordinator imports the Conv and Rotation-head bundles, relocates checkpoint
+  paths, and runs the unchanged strict result builder. Shared-storage runs keep
+  the automatic locked finalization path.
 
 ## Current Work
 

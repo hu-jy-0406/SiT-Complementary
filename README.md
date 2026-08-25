@@ -82,8 +82,10 @@ file before starting. The preferred layout runs Conv and Rotation-head
 concurrently, one experiment per 8×A100 40GB node, while preserving the
 original eight-rank topology; 8×H20 remains a fallback. A prompt can select
 `conv`, `rotation-head`, or both. The contract detects Slurm versus a dedicated
-server, requires shared durable storage across the two nodes, and downloads the
-pinned Conv resume checkpoint from
+server and separately detects shared versus isolated storage. Shared nodes
+finalize in place; isolated servers export SHA-256-verified experiment bundles
+and merge them later on a CPU coordinator. It downloads the pinned Conv resume
+checkpoint from
 [`BlueSourceJY/SiT-Complementary`](https://huggingface.co/BlueSourceJY/SiT-Complementary),
 trains both variants through 800 epochs, runs the complete FID schedule, and
 builds one concurrency-safe Markdown/JSON/TSV/PNG result package.

@@ -30,16 +30,23 @@
 - Detect the execution environment first. Standalone runs use
   `workflow/run_gpu_experiment.sh {conv|rotation-head}`; Slurm runs use
   `EXPERIMENT={conv|rotation-head} bash slurm/submit_h20_pipeline.sh`.
+- Do not assume that two machines belong to one Slurm cluster. Classify each
+  independent execution endpoint and separately verify whether storage is
+  shared, following the decision tree in `H20_TRAINING_TASK.md`.
 - Prefer `GPU_PROFILE=a100-40gb` with exactly eight visible A100 40GB GPUs. The
   project has verified that 40GB is ample, and eight ranks preserve the
   original topology. With two 8×A100 nodes, run Conv on one node and
   Rotation-head on the other concurrently; never combine them into one
   16-rank job. Use H20 only when A100 is unavailable.
-- Both nodes must use the same absolute `OUTPUT_ROOT` and `ASSET_ROOT` on
-  shared storage. Stop and ask the owner if this is impossible. Never run two
-  copies of the same experiment against one output root.
+- With verified shared storage, both nodes use identical absolute
+  `OUTPUT_ROOT` and `ASSET_ROOT`. With isolated storage, use local durable paths
+  and export one bundle per experiment with `workflow/portable_results.py`;
+  transfer and merge both verified bundles on a coordinator. Never fabricate a
+  shared path or manually edit FID records.
+- Never run two copies of the same experiment against one output root.
 - Never commit, print, or persist `WANDB_API_KEY` or `HF_TOKEN`. Do not run
   `wandb login` on a shared account.
 - A single experiment is done when its experiment-complete marker exists. The
-  joint handoff is done only when `training_results.json` says `COMPLETE` and
-  `TRAINING_RESULTS.md` contains both CFG=1 curves and all four final FIDs.
+  joint handoff—whether shared or bundle-merged—is done only when
+  `training_results.json` says `COMPLETE` and `TRAINING_RESULTS.md` contains
+  both CFG=1 curves and all four final FIDs.

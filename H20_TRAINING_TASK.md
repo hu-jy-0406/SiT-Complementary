@@ -20,11 +20,16 @@ says “run both”, run them concurrently on two nodes—not sequentially on on
 node and not as one 16-rank distributed job. Each experiment always uses one
 node and exactly eight GPUs.
 
-The two runs are independent during training but must use the same absolute
-`OUTPUT_ROOT` and `ASSET_ROOT` on storage visible from both nodes. The first run
-to finish writes a valid partial report; the second automatically creates the
-strict combined report. If shared storage is unavailable, stop and ask the
-operator rather than inventing a file-copy workflow.
+Do not assume that “two nodes” means one Slurm cluster. The deployment can be:
+
+1. one Slurm cluster controlling two nodes;
+2. two independent servers or clusters with a shared filesystem; or
+3. two fully isolated servers with separate filesystems.
+
+Shared-storage deployments combine results automatically. Isolated servers
+export one verified portable bundle per experiment and merge the two bundles
+later on a coordinator. Section 5 classifies the deployment; sections 7–9 give
+the matching execution path.
 
 ## 2. Required outcome
 
@@ -88,9 +93,15 @@ Conv CFG=1 points through step 1,750,000, the ImageNet FID reference, and the
 VAE. The workflow additionally evaluates the resume checkpoint at step
 1,950,000. Never replace a failed verified download with an unpinned file.
 
-## 5. Discover the server mode before GPU work
+## 5. Classify compute control and storage before GPU work
 
-Run this lightweight check from the clone:
+First determine whether both machines belong to one Slurm control plane. One
+working `squeue` that lists allocations for both nodes means one cluster. Two
+different login hosts/controllers, or no scheduler, means independent
+execution endpoints. Do not use a node name from one cluster on another.
+
+Run this lightweight check on every independent endpoint (once on the login
+host is enough for a single Slurm cluster):
 
 ```bash
 if [[ -n "${SLURM_JOB_ID:-}" || -n "${SLURM_CLUSTER_NAME:-}" ]]; then
@@ -111,13 +122,27 @@ printf 'EXECUTION_MODE=%s\n' "$EXECUTION_MODE"
 ```
 
 - `slurm`: submit with section 8. Never run preflight, smoke, training, or FID
-  on the login node.
+  on that cluster's login node.
 - `standalone`: confirm with the owner that each selected machine is dedicated
   and that its eight GPUs are exclusive, then use section 7.
 - `undetermined`: stop and ask the owner. An installed Slurm client without a
   working controller is not permission to run locally.
 
-Do not mix standalone and Slurm launchers within one experiment.
+Do not mix standalone and Slurm launchers within one experiment. It is valid
+for Conv and Rotation-head to use different execution modes when they run on
+two independent systems, provided both still use the fixed eight-rank A100
+profile.
+
+Next classify storage independently:
+
+- `shared`: the owner confirms that both compute nodes see the same filesystem,
+  or a small probe file written under the proposed path from one node is visible
+  at the same absolute path from the other. Use shared mode only after this is
+  demonstrated.
+- `isolated`: the nodes cannot see each other's files, the absolute paths
+  differ, or access cannot be verified. Use the portable-bundle flow in section
+  9. Treat uncertainty as `isolated`; training does not need to wait for this
+  clarification.
 
 ## 6. One-time setup and site inputs
 
@@ -128,7 +153,8 @@ conda env create -f environment.yml   # or update the existing environment
 conda activate sit-complementary
 ```
 
-Obtain these paths from the operator; do not guess:
+Obtain local paths from the operator; do not guess. For verified shared storage,
+both experiments use the same values:
 
 ```bash
 export IMAGENET_TRAIN=/absolute/path/to/ILSVRC/Data/CLS-LOC/train
@@ -140,10 +166,16 @@ export GPU_PROFILE=a100-40gb
 Requirements:
 
 - ImageNet contains exactly 1,000 class directories and 1,281,167 images.
-- Both nodes see `OUTPUT_ROOT` and `ASSET_ROOT` at the same absolute paths.
+- In shared mode, both nodes see `OUTPUT_ROOT` and `ASSET_ROOT` at the same
+  absolute paths.
+- In isolated mode, each server uses its own durable `OUTPUT_ROOT` and
+  `ASSET_ROOT`; the paths may differ. Never point at a nonexistent “shared” path
+  merely to make the strings match.
 - Use one new `OUTPUT_ROOT`, then reuse it for every retry of this task.
-- Allow at least 100 GiB free. The workflow serializes shared asset preparation
-  and report generation with file locks.
+- Allow at least 100 GiB free per training server. A later bundle coordinator
+  needs roughly 2 GiB plus report space.
+- Shared mode serializes asset preparation and report generation with file
+  locks. Isolated mode has no cross-server writes.
 - One `OUTPUT_ROOT` may not mix A100 and H20 runs; `.gpu_profile` enforces this.
 - Never launch two copies of the same experiment into the same output root.
 
@@ -200,7 +232,7 @@ step before saved periodic checkpoints are evaluated.
 `workflow/run_h20_pipeline.sh` remains a one-node sequential compatibility
 entry point, but do not use it when the requested two-node layout is available.
 
-## 8. Slurm execution: independent chains on two nodes
+## 8. Slurm execution: independent chains
 
 Run only lightweight submission commands on the login node. Configure the
 site's valid settings:
@@ -225,9 +257,10 @@ For the Rotation-head agent/prompt:
 EXPERIMENT=rotation-head bash slurm/submit_h20_pipeline.sh
 ```
 
-These create two independent `afterok` chains, so Slurm can place one on each
-8×A100 node concurrently. If the owner explicitly supplies node names and the
-site permits node constraints, bind each chain separately:
+On one Slurm cluster these create two independent `afterok` chains, so Slurm
+can place one on each 8×A100 node concurrently. If the owner explicitly
+supplies node names and the site permits node constraints, bind each chain
+separately:
 
 ```bash
 EXPERIMENT=conv SLURM_NODELIST=a100-node-01 bash slurm/submit_h20_pipeline.sh
@@ -241,7 +274,64 @@ job. `EXPERIMENT` is required; use `all` only for the legacy sequential chain.
 `SLURM_AFTEROK_JOB_ID` may attach a selected chain to an existing numeric job
 dependency. Monitor the jobs and resubmit only the affected selector.
 
-## 9. Restart, concurrency, and result behavior
+If the experiments live on two independent Slurm clusters, run the Conv command
+on the Conv cluster's login host and the Rotation-head command on the other
+cluster's login host. Configure each cluster separately and omit cross-cluster
+`SLURM_NODELIST` values. Use section 9 unless shared storage has actually been
+verified across the clusters.
+
+## 9. Isolated-server export and merge
+
+Skip this section when shared storage is verified. On isolated servers, wait
+until each selected experiment has completed all evaluations, then export its
+bundle locally. On the Conv server:
+
+```bash
+python workflow/portable_results.py export \
+  --variant conv \
+  --output-root "$OUTPUT_ROOT" \
+  --asset-root "$ASSET_ROOT" \
+  --bundle-dir /durable/transfer/conv-bundle
+```
+
+On the Rotation-head server:
+
+```bash
+python workflow/portable_results.py export \
+  --variant rotation-head \
+  --output-root "$OUTPUT_ROOT" \
+  --asset-root "$ASSET_ROOT" \
+  --bundle-dir /durable/transfer/rotation-head-bundle
+```
+
+An export succeeds only after that experiment's complete checkpoint/FID
+schedule validates. Each bundle contains its final checkpoint, required raw FID
+records, a SHA-256 manifest, and—in the Conv bundle—the pinned historical curve.
+It does not copy every intermediate checkpoint. Expect roughly 0.6 GiB per
+bundle. A completed bundle is immutable; choose a new directory for a different
+run.
+
+Transfer both entire bundle directories to one coordinator using an
+operator-approved method such as `rsync -a`, `scp -r`, or offline storage. Do
+not transfer a temporary directory whose export has not printed
+`PORTABLE_BUNDLE_COMPLETE`. On the coordinator, use a fresh output directory:
+
+```bash
+export MERGED_OUTPUT_ROOT=/durable/path/sit-complementary-merged-results
+python workflow/portable_results.py merge \
+  --conv-bundle /received/conv-bundle \
+  --rotation-head-bundle /received/rotation-head-bundle \
+  --output-root "$MERGED_OUTPUT_ROOT"
+```
+
+The coordinator needs the repository's Conda environment and enough CPU RAM to
+inspect checkpoints, but no GPU or ImageNet. The merge command verifies every
+bundle hash, requires matching GPU profiles, safely relocates final checkpoint
+paths, and invokes the original strict report builder. Never edit FID JSON files
+or manifests manually. Success prints `PORTABLE_RESULTS_COMPLETE`; report that
+coordinator path as the final output.
+
+## 10. Restart, concurrency, and result behavior
 
 - Checkpoints and FID JSON shards are atomically committed.
 - A restart validates the latest checkpoint at or below its target.
@@ -249,15 +339,19 @@ dependency. Monitor the jobs and resubmit only the affected selector.
   streams. The 50,176 PNGs are removed only after FID is safely recorded.
 - `KEEP_FID_SAMPLES=1` is for debugging only; the default saves disk.
 - W&B is supplementary; local JSON shards are authoritative.
-- Asset preparation is locked under `ASSET_ROOT`; report generation is locked
-  under `OUTPUT_ROOT`. The two experiments may otherwise run concurrently.
+- In shared mode, asset preparation is locked under `ASSET_ROOT` and report
+  generation under `OUTPUT_ROOT`. The two experiments otherwise run
+  concurrently.
+- In isolated mode, each experiment writes only local storage. Bundle merge is
+  restart-safe and refuses conflicting imported files.
 - Each completed experiment writes `.experiment_complete-conv` or
   `.experiment_complete-rotation-head`.
-- The first finisher prints `JOINT_RESULTS_PENDING`; this is normal. The second
-  prints `JOINT_RESULTS_COMPLETE` after the strict report passes.
+- With shared storage, the first finisher prints `JOINT_RESULTS_PENDING`; the
+  second prints `JOINT_RESULTS_COMPLETE`. On isolated servers both local runs
+  may remain pending until their bundles are merged; this is normal.
 
-If both experiment markers exist but the report was not finalized (for example
-the second node stopped immediately after evaluation), recover with:
+In shared mode only, if both experiment markers exist but the report was not
+finalized, recover with:
 
 ```bash
 python workflow/finalize_handoff.py \
@@ -267,7 +361,7 @@ python workflow/finalize_handoff.py \
   --gpu-profile "$GPU_PROFILE"
 ```
 
-## 10. Completion and handoff
+## 11. Completion and handoff
 
 The final tree must include:
 
@@ -284,7 +378,9 @@ training_results/
     └── rotation-head/*.json
 ```
 
-Verify `training_results.json` says `COMPLETE`. `TRAINING_RESULTS.md` must list
+This tree lives under the shared `OUTPUT_ROOT`, or under `MERGED_OUTPUT_ROOT`
+for isolated servers. Verify `training_results.json` says `COMPLETE`.
+`TRAINING_RESULTS.md` must list
 the two final checkpoint paths/hashes, four final CFG=1/CFG=4 FIDs, and both
 CFG=1 curves. Report its absolute path, the final checkpoint paths, and the
 strict completion status to the operator.

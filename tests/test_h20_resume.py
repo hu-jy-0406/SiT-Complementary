@@ -8,7 +8,13 @@ import tempfile
 import unittest
 from unittest import mock
 
-from workflow import experiment_status, finalize_handoff, prepare_assets, stage_status
+from workflow import (
+    experiment_status,
+    finalize_handoff,
+    portable_results,
+    prepare_assets,
+    stage_status,
+)
 
 
 class GpuProfileLockTest(unittest.TestCase):
@@ -296,6 +302,106 @@ class FinalizeHandoffTest(unittest.TestCase):
                 (root / "output" / ".finalize_passed-conv").read_text(),
                 "complete\n",
             )
+
+
+class PortableResultsTest(unittest.TestCase):
+    def _make_bundle(
+        self, root: Path, variant: str, checkpoint_payload: bytes
+    ) -> Path:
+        output = root / f"{variant}-output"
+        asset = root / f"{variant}-assets"
+        bundle = root / f"{variant}-bundle"
+        (output / ".gpu_profile").parent.mkdir(parents=True)
+        (output / ".gpu_profile").write_text("a100-40gb\n")
+        checkpoint = (
+            output
+            / "training"
+            / stage_status.RUN_NAMES[variant]
+            / "checkpoints"
+            / f"{stage_status.FINAL_STEP:07d}.pt"
+        )
+        checkpoint.parent.mkdir(parents=True)
+        checkpoint.write_bytes(checkpoint_payload)
+        checkpoint_hash = portable_results.sha256_file(checkpoint)
+        raw = output / "training_results" / "raw" / variant
+        raw.mkdir(parents=True)
+        for name in portable_results.required_raw_names(variant):
+            stem = name.removesuffix(".json")
+            step = int(stem.split("-cfg-")[0].removeprefix("step-"))
+            cfg = float(stem.split("-cfg-")[1])
+            (raw / name).write_text(
+                json.dumps(
+                    {
+                        "variant": variant,
+                        "step": step,
+                        "cfg": cfg,
+                        "checkpoint": f"/isolated/{variant}/{step}.pt",
+                        "checkpoint_sha256": checkpoint_hash,
+                    }
+                )
+            )
+        if variant == "conv":
+            history = (
+                asset
+                / "huggingface"
+                / "BlueSourceJY"
+                / "SiT-Complementary"
+                / "experiments"
+                / "bs256_lr1e-4"
+                / "conv-layer"
+                / "fid_cfg1_50k.tsv"
+            )
+            history.parent.mkdir(parents=True)
+            history.write_text("step\tfid\n")
+        with mock.patch.object(portable_results, "experiment_issues", return_value=[]):
+            self.assertEqual(
+                portable_results.export_bundle(variant, output, asset, bundle), 0
+            )
+        return bundle
+
+    def test_isolated_bundles_merge_and_relocate_final_checkpoints(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            conv = self._make_bundle(root, "conv", b"conv-final")
+            rotation = self._make_bundle(root, "rotation-head", b"rotation-final")
+            merged = root / "merged"
+            with mock.patch.object(
+                portable_results.build_results, "main", return_value=0
+            ) as build:
+                self.assertEqual(
+                    portable_results.merge_bundles(conv, rotation, merged), 0
+                )
+            self.assertIn("--strict", build.call_args.args[0])
+            for variant in stage_status.RUN_NAMES:
+                record = json.loads(
+                    (
+                        merged
+                        / "training_results"
+                        / "raw"
+                        / variant
+                        / f"step-{stage_status.FINAL_STEP:07d}-cfg-1.json"
+                    ).read_text()
+                )
+                self.assertIn("portable_original_checkpoint", record)
+                self.assertEqual(
+                    Path(record["checkpoint"]),
+                    merged
+                    / "portable_import"
+                    / variant
+                    / f"{stage_status.FINAL_STEP:07d}.pt",
+                )
+            self.assertTrue((merged / ".portable_results_complete").is_file())
+
+    def test_bundle_tampering_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = self._make_bundle(root, "rotation-head", b"rotation-final")
+            raw = bundle / "raw" / portable_results.required_raw_names(
+                "rotation-head"
+            )[0]
+            raw.write_text("{}\n")
+            with self.assertRaisesRegex(RuntimeError, "SHA-256 mismatch"):
+                portable_results.validate_bundle(bundle, "rotation-head")
 
 
 class SlurmSubmitterTest(unittest.TestCase):
