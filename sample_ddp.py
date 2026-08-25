@@ -10,10 +10,10 @@ For a simple single-GPU/CPU sampling script, see sample.py.
 """
 import torch
 import torch.distributed as dist
-from models_rot_head import SiT_models
+from model_variants import MODEL_VARIANTS, get_model_registry
 from download import find_model
 from transport import create_transport, Sampler
-from diffusers.models import AutoencoderKL
+from vae_utils import load_vae
 from train_utils import parse_ode_args, parse_sde_args, parse_transport_args
 from tqdm import tqdm
 import os
@@ -69,7 +69,7 @@ def main(mode, args):
 
     # Load model:
     latent_size = args.image_size // 8
-    model = SiT_models[args.model](
+    model = get_model_registry(args.variant)[args.model](
         input_size=latent_size,
         num_classes=args.num_classes,
         learn_sigma=learn_sigma,
@@ -115,7 +115,7 @@ def main(mode, args):
             last_step_size=args.last_step_size,
             num_steps=args.num_sampling_steps,
         )
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
+    vae = load_vae(args.vae, device)
     assert args.cfg_scale >= 1.0, "In almost all cases, cfg_scale be >= 1.0"
     using_cfg = args.cfg_scale > 1.0
 
@@ -123,7 +123,7 @@ def main(mode, args):
     model_string_name = args.model.replace("/", "-")
     ckpt_string_name = os.path.basename(args.ckpt).replace(".pt", "") if args.ckpt else "pretrained"
     if mode == "ODE":
-        folder_name = f"{model_string_name}-rot-head-{ckpt_string_name}-" \
+        folder_name = f"{model_string_name}-{args.variant}-{ckpt_string_name}-" \
                   f"cfg-{args.cfg_scale}-{args.per_proc_batch_size}-"\
                   f"{mode}-{args.num_sampling_steps}-{args.sampling_method}"
     elif mode == "SDE":
@@ -149,10 +149,10 @@ def main(mode, args):
     samples_needed_this_gpu = int(total_samples // dist.get_world_size())
     assert samples_needed_this_gpu % n == 0, "samples_needed_this_gpu must be divisible by the per-GPU batch size"
     iterations = int(samples_needed_this_gpu // n)
-    done_iterations = int( int(num_samples // dist.get_world_size()) // n)
-    pbar = range(iterations)
+    done_iterations = int(int(num_samples // dist.get_world_size()) // n)
+    pbar = range(done_iterations, iterations)
     pbar = tqdm(pbar) if rank == 0 else pbar
-    total = 0
+    total = done_iterations * global_batch_size
     
     for i in pbar:
         # Sample inputs:
@@ -180,14 +180,16 @@ def main(mode, args):
         # Save samples to disk as individual .png files
         for i, sample in enumerate(samples):
             index = i * dist.get_world_size() + rank + total
-            Image.fromarray(sample).save(f"{sample_folder_dir}/{index:06d}.png")
+            if args.keep_padded_samples or index < args.num_fid_samples:
+                Image.fromarray(sample).save(f"{sample_folder_dir}/{index:06d}.png")
         total += global_batch_size
         dist.barrier()
 
     # Make sure all processes have finished saving their samples before attempting to convert to .npz
     dist.barrier()
-    if rank == 0:
+    if rank == 0 and not args.skip_npz:
         create_npz_from_sample_folder(sample_folder_dir, args.num_fid_samples)
+    if rank == 0:
         print("Done.")
     dist.barrier()
     dist.destroy_process_group()
@@ -206,11 +208,22 @@ if __name__ == "__main__":
     assert mode[:2] != "--", "Usage: program.py <mode> [options]"
     assert mode in ["ODE", "SDE"], "Invalid mode. Please choose 'ODE' or 'SDE'"
 
-    parser.add_argument("--model", type=str, choices=list(SiT_models.keys()), default="SiT-XL/2")
+    parser.add_argument("--variant", choices=list(MODEL_VARIANTS), default="base")
+    parser.add_argument("--model", type=str, choices=list(next(iter(MODEL_VARIANTS.values())).keys()), default="SiT-XL/2")
     parser.add_argument("--vae",  type=str, choices=["ema", "mse"], default="ema")
     parser.add_argument("--sample-dir", type=str, default="samples")
     parser.add_argument("--per-proc-batch-size", type=int, default=64)
     parser.add_argument("--num-fid-samples", type=int, default=50_000)
+    parser.add_argument(
+        "--keep-padded-samples",
+        action="store_true",
+        help="Keep the final distributed batch padding (historical protocol).",
+    )
+    parser.add_argument(
+        "--skip-npz",
+        action="store_true",
+        help="Do not create the large sample NPZ when evaluating the PNG folder.",
+    )
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--cfg-scale",  type=float, default=1.0)

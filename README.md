@@ -24,8 +24,8 @@ This repository contains:
 First, download and set up the repo:
 
 ```bash
-git clone https://github.com/willisma/SiT.git
-cd SiT
+git clone https://github.com/hu-jy-0406/SiT-Complementary.git
+cd SiT-Complementary
 ```
 
 We provide an [`environment.yml`](environment.yml) file that can be used to create a Conda environment. If you only want 
@@ -33,8 +33,55 @@ to run pre-trained models locally on CPU, you can remove the `cudatoolkit` and `
 
 ```bash
 conda env create -f environment.yml
-conda activate SiT
+conda activate sit-complementary
 ```
+
+### Complementary model launchers
+
+Each model family has a launcher:
+
+```bash
+bash run_train.sh              # base
+bash run_train_rot_layer.sh    # rot-layer
+bash run_train_rot_head.sh     # rot-head
+bash run_train_conv.sh         # conv
+```
+
+Override settings through environment variables or append regular training
+arguments. Always set the site's ImageNet path explicitly.
+
+```bash
+IMAGENET_PATH=/path/to/imagenet/train NPROC_PER_NODE=1 \
+GLOBAL_BATCH_SIZE=64 MODEL=SiT-S/2 \
+  bash run_train_rot_head.sh --max-train-steps 1000
+```
+
+Sampling supports all four families through `--variant`:
+
+```bash
+python sample.py ODE --variant base      --model SiT-S/2 --ckpt /path/to/base.pt
+python sample.py ODE --variant rot-layer --model SiT-S/2 --ckpt /path/to/rot-layer.pt
+python sample.py ODE --variant rot-head  --model SiT-S/2 --ckpt /path/to/rot-head.pt
+python sample.py ODE --variant conv      --model SiT-S/2 --ckpt /path/to/conv.pt
+```
+
+For distributed evaluation sampling:
+
+```bash
+CKPT=/path/to/model.pt VARIANT=rot-head NPROC_PER_NODE=4 bash run_sample.sh
+```
+
+Only launch GPU commands inside a legitimate allocation or on a dedicated
+node, and set `NPROC_PER_NODE` to the number of assigned GPUs.
+
+### Automated Conv + Rotation-head handoff on 8×H20
+
+The portable, restart-safe handoff is specified in
+[`H20_TRAINING_TASK.md`](H20_TRAINING_TASK.md). A coding agent should read that
+file before starting. It downloads the pinned Conv resume checkpoint from
+[`BlueSourceJY/SiT-Complementary`](https://huggingface.co/BlueSourceJY/SiT-Complementary),
+trains Conv and then Rotation-head through 800 epochs, runs the complete FID
+schedule, and builds a strict Markdown/JSON/TSV/PNG result package.
 
 
 ## Sampling [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/willisma/SiT/blob/main/run_SiT.ipynb)
@@ -96,12 +143,14 @@ one node:
 torchrun --nnodes=1 --nproc_per_node=N train.py --model SiT-XL/2 --data-path /path/to/imagenet/train
 ```
 
-**Logging.** To enable `wandb`, firstly set `WANDB_KEY`, `ENTITY`, and `PROJECT` as environment variables:
+**Logging.** To enable `wandb` without persisting credentials through
+`wandb login`, set `WANDB_API_KEY` for the training process. `ENTITY` is
+optional, and `PROJECT` defaults to `SiT-Complementary`:
 
 ```bash
-export WANDB_KEY="key"
-export ENTITY="entity name"
-export PROJECT="project name"
+export WANDB_API_KEY="key"
+export ENTITY="optional entity name"
+export PROJECT="SiT-Complementary"
 ```
 
 Then in training command add the `--wandb` flag:
@@ -165,5 +214,3 @@ versus 2.06 in the paper).
 
 ## License
 This project is under the MIT license. See [LICENSE](LICENSE.txt) for details.
-
-

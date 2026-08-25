@@ -25,9 +25,8 @@ import logging
 import os
 
 from models_rot_layer import SiT_models
-from download import find_model
 from transport import create_transport, Sampler
-from diffusers.models import AutoencoderKL
+from vae_utils import load_vae
 from train_utils import parse_transport_args
 import wandb_utils
 
@@ -137,9 +136,9 @@ def main(args):
         logger = create_logger(experiment_dir)
         logger.info(f"Experiment directory created at {experiment_dir}")
 
-        entity = os.environ["ENTITY"]
-        project = os.environ["PROJECT"]
         if args.wandb:
+            entity = os.environ["ENTITY"]
+            project = os.environ["PROJECT"]
             wandb_utils.initialize(args, entity, experiment_name, project)
     else:
         logger = create_logger(None)
@@ -155,13 +154,18 @@ def main(args):
     # Note that parameter initialization is done within the SiT constructor
     ema = deepcopy(model).to(device)  # Create an EMA of the model for use after training
 
+    resume_opt_state = None
+    resume_train_steps = 0
     if args.ckpt is not None:
-        ckpt_path = args.ckpt
-        state_dict = find_model(ckpt_path)
-        model.load_state_dict(state_dict["model"])
-        ema.load_state_dict(state_dict["ema"])
-        opt.load_state_dict(state_dict["opt"])
-        args = state_dict["args"]
+        checkpoint = torch.load(args.ckpt, map_location="cpu", weights_only=False)
+        required_keys = {"model", "ema", "opt"}
+        if not required_keys.issubset(checkpoint):
+            missing = required_keys.difference(checkpoint)
+            raise ValueError(f"Training checkpoint is missing keys: {sorted(missing)}")
+        model.load_state_dict(checkpoint["model"])
+        ema.load_state_dict(checkpoint["ema"])
+        resume_opt_state = checkpoint["opt"]
+        resume_train_steps = checkpoint.get("train_steps", 0)
 
     requires_grad(ema, False)
     
@@ -174,11 +178,13 @@ def main(args):
         args.sample_eps
     )  # default: velocity; 
     transport_sampler = Sampler(transport)
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
+    vae = load_vae(args.vae, device)
     logger.info(f"SiT Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # Setup optimizer (we used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper):
     opt = torch.optim.AdamW(model.parameters(), lr=2e-4, weight_decay=0)
+    if resume_opt_state is not None:
+        opt.load_state_dict(resume_opt_state)
 
     # Setup data:
     transform = transforms.Compose([
@@ -212,7 +218,7 @@ def main(args):
     ema.eval()  # EMA model should always be in eval mode
 
     # Variables for monitoring/logging purposes:
-    train_steps = 0
+    train_steps = resume_train_steps
     log_steps = 0
     running_loss = 0
     start_time = time()
@@ -284,7 +290,8 @@ def main(args):
                         "model": model.module.state_dict(),
                         "ema": ema.state_dict(),
                         "opt": opt.state_dict(),
-                        "args": args
+                        "args": args,
+                        "train_steps": train_steps,
                     }
                     checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
                     torch.save(checkpoint, checkpoint_path)
@@ -308,6 +315,12 @@ def main(args):
                     wandb_utils.log_image(out_samples, train_steps)
                 logging.info("Generating EMA samples done.")
 
+            if args.max_train_steps is not None and train_steps >= args.max_train_steps:
+                break
+
+        if args.max_train_steps is not None and train_steps >= args.max_train_steps:
+            break
+
     model.eval()  # important! This disables randomized embedding dropout
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
 
@@ -324,6 +337,7 @@ if __name__ == "__main__":
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--epochs", type=int, default=1400)
+    parser.add_argument("--max-train-steps", type=int, default=None)
     parser.add_argument("--global-batch-size", type=int, default=256)
     parser.add_argument("--global-seed", type=int, default=0)
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training

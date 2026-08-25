@@ -8,11 +8,11 @@ import torch
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 from torchvision.utils import save_image
-from diffusers.models import AutoencoderKL
 from download import find_model
-from models import SiT_models
+from model_variants import MODEL_VARIANTS, get_model_registry
 from train_utils import parse_ode_args, parse_sde_args, parse_transport_args
 from transport import create_transport, Sampler
+from vae_utils import load_vae
 import argparse
 import sys
 from time import time
@@ -29,13 +29,13 @@ def main(mode, args):
         assert args.image_size in [256, 512]
         assert args.num_classes == 1000
         assert args.image_size == 256, "512x512 models are not yet available for auto-download." # remove this line when 512x512 models are available
-        learn_sigma = args.image_size == 256
-    else:
-        learn_sigma = False
+    # Repository checkpoints use learn_sigma=True even though forward returns 4 channels.
+    learn_sigma = True
+
 
     # Load model:
     latent_size = args.image_size // 8
-    model = SiT_models[args.model](
+    model = get_model_registry(args.variant)[args.model](
         input_size=latent_size,
         num_classes=args.num_classes,
         learn_sigma=learn_sigma,
@@ -82,7 +82,7 @@ def main(mode, args):
         )
     
 
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
+    vae = load_vae(args.vae, device)
 
     # Labels to condition the model with (feel free to change):
     class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
@@ -121,7 +121,8 @@ if __name__ == "__main__":
     assert mode[:2] != "--", "Usage: program.py <mode> [options]"
     assert mode in ["ODE", "SDE"], "Invalid mode. Please choose 'ODE' or 'SDE'"
     
-    parser.add_argument("--model", type=str, choices=list(SiT_models.keys()), default="SiT-XL/2")
+    parser.add_argument("--variant", choices=list(MODEL_VARIANTS), default="base")
+    parser.add_argument("--model", type=str, choices=list(next(iter(MODEL_VARIANTS.values())).keys()), default="SiT-XL/2")
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="mse")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)

@@ -3,7 +3,6 @@ import torch
 from torchvision.utils import make_grid
 import torch.distributed as dist
 from PIL import Image
-import os
 import argparse
 import hashlib
 import math
@@ -26,7 +25,6 @@ def generate_run_id(exp_name):
 
 def initialize(args, entity, exp_name, project_name):
     config_dict = namespace_to_dict(args)
-    wandb.login(key=os.environ["WANDB_KEY"])
     wandb.init(
         entity=entity,
         project=project_name,
