@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from workflow import prepare_assets, stage_status
+from workflow import experiment_status, finalize_handoff, prepare_assets, stage_status
 
 
 class GpuProfileLockTest(unittest.TestCase):
@@ -207,7 +207,7 @@ class StageStatusTest(unittest.TestCase):
                 )
             )
 
-    def test_stale_complete_summary_does_not_hide_missing_raw_shards(self):
+    def test_final_stage_is_local_to_its_experiment(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             output = root / "output"
@@ -237,19 +237,65 @@ class StageStatusTest(unittest.TestCase):
                 4.0,
                 checkpoint,
             )
-            result_root = output / "training_results"
-            for filename in stage_status.FINAL_ARTIFACTS:
-                path = result_root / filename
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(b"placeholder")
-            (result_root / "training_results.json").write_text(
-                json.dumps({"status": "COMPLETE"})
-            )
-
             issues = stage_status.completion_issues(
                 "rotation-head", 4_003_200, output, asset
             )
-            self.assertTrue(any("missing evaluation shard" in issue for issue in issues))
+            self.assertEqual(issues, [])
+            experiment_issues = experiment_status.experiment_issues(
+                "rotation-head", output, asset
+            )
+            self.assertTrue(
+                any("target 250000" in issue for issue in experiment_issues)
+            )
+
+
+class FinalizeHandoffTest(unittest.TestCase):
+    def _run(self, output: Path, asset: Path) -> int:
+        argv = [
+            "finalize_handoff.py",
+            "--active-variant",
+            "conv",
+            "--output-root",
+            str(output),
+            "--asset-root",
+            str(asset),
+            "--gpu-profile",
+            "a100-40gb",
+        ]
+        with mock.patch("sys.argv", argv):
+            return finalize_handoff.main()
+
+    def test_first_finisher_builds_non_strict_pending_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with mock.patch.object(
+                finalize_handoff,
+                "experiment_issues",
+                side_effect=lambda variant, *_: [] if variant == "conv" else ["wait"],
+            ), mock.patch.object(
+                finalize_handoff.build_results, "main", return_value=0
+            ) as build:
+                self.assertEqual(self._run(root / "output", root / "assets"), 0)
+            self.assertNotIn("--strict", build.call_args.args[0])
+            self.assertEqual(
+                (root / "output" / ".finalize_passed-conv").read_text(),
+                "pending\n",
+            )
+
+    def test_second_finisher_requires_strict_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with mock.patch.object(
+                finalize_handoff, "experiment_issues", return_value=[]
+            ), mock.patch.object(
+                finalize_handoff.build_results, "main", return_value=0
+            ) as build:
+                self.assertEqual(self._run(root / "output", root / "assets"), 0)
+            self.assertIn("--strict", build.call_args.args[0])
+            self.assertEqual(
+                (root / "output" / ".finalize_passed-conv").read_text(),
+                "complete\n",
+            )
 
 
 class SlurmSubmitterTest(unittest.TestCase):
@@ -314,6 +360,7 @@ class SlurmSubmitterTest(unittest.TestCase):
                     "IMAGENET_TRAIN": str(root / "imagenet"),
                     "OUTPUT_ROOT": str(output),
                     "ASSET_ROOT": str(asset),
+                    "EXPERIMENT": "all",
                     "FAKE_SBATCH_COUNTER": str(root / "counter.txt"),
                     "FAKE_SBATCH_CALLS": str(calls),
                 }
@@ -337,6 +384,47 @@ class SlurmSubmitterTest(unittest.TestCase):
             self.assertIn("afterok:1001", submitted[1])
             self.assertNotIn("test-cluster", "\n".join(submitted))
             self.assertIn("FINAL_JOB_ID=1026", completed.stdout)
+
+    def test_selects_one_experiment_and_optional_node(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            fake_sbatch = fake_bin / "sbatch"
+            fake_sbatch.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "printf '%s\\n' \"$*\" >> \"$FAKE_SBATCH_CALLS\"\n"
+                "count=$(wc -l < \"$FAKE_SBATCH_CALLS\")\n"
+                "printf '%s\\n' \"$((2000 + count))\"\n"
+            )
+            fake_sbatch.chmod(fake_sbatch.stat().st_mode | stat.S_IXUSR)
+            calls = root / "calls.txt"
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{fake_bin}:{env['PATH']}",
+                    "IMAGENET_TRAIN": str(root / "imagenet"),
+                    "OUTPUT_ROOT": str(root / "output"),
+                    "ASSET_ROOT": str(root / "assets"),
+                    "EXPERIMENT": "conv",
+                    "SLURM_NODELIST": "a100-node-01",
+                    "FAKE_SBATCH_CALLS": str(calls),
+                }
+            )
+            subprocess.run(
+                ["bash", "slurm/submit_h20_pipeline.sh"],
+                cwd=repo_root,
+                env=env,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            submitted = calls.read_text().splitlines()
+            self.assertEqual(len(submitted), 10)
+            self.assertTrue(all("PIPELINE_VARIANT=conv" in line for line in submitted))
+            self.assertTrue(all("--nodelist a100-node-01" in line for line in submitted))
 
 
 if __name__ == "__main__":

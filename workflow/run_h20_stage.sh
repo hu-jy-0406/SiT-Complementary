@@ -44,12 +44,27 @@ export TORCH_HOME="$asset_root/cache/torch"
 export HF_HOME="$asset_root/cache/huggingface"
 conv_repo_dir="$asset_root/huggingface/BlueSourceJY/SiT-Complementary"
 conv_source="$conv_repo_dir/checkpoints/bs256_lr1e-4/conv-layer/1950000.pt"
-conv_history="$conv_repo_dir/experiments/bs256_lr1e-4/conv-layer/fid_cfg1_50k.tsv"
 fid_reference="$asset_root/fid/VIRTUAL_imagenet256_labeled.npz"
+
+finalize_experiment() {
+    python workflow/experiment_status.py \
+        --variant "$variant" \
+        --output-root "$OUTPUT_ROOT" \
+        --asset-root "$asset_root" \
+        --write-marker
+    python workflow/finalize_handoff.py \
+        --active-variant "$variant" \
+        --output-root "$OUTPUT_ROOT" \
+        --asset-root "$asset_root" \
+        --gpu-profile "$gpu_profile"
+}
 
 if [[ "${TRAIN_ONLY:-0}" != "1" && "${EVALUATE_ONLY:-0}" != "1" ]] && \
     h20_stage_complete "$variant" "$target" "$OUTPUT_ROOT" "$asset_root"; then
     echo "GPU_STAGE_ALREADY_COMPLETE variant=$variant target=$target"
+    if (( target == final_step )); then
+        finalize_experiment
+    fi
     exit 0
 fi
 
@@ -58,14 +73,14 @@ if [[ "$prepare_mode" != "auto" && "$prepare_mode" != "0" && "$prepare_mode" != 
     echo "PREPARE_ASSETS must be auto, 0, or 1" >&2
     exit 2
 fi
-if [[ "$prepare_mode" == "0" ]]; then
-    export HF_HUB_OFFLINE=1
-    python workflow/prepare_assets.py --asset-root "$asset_root" --local-only
-    python workflow/prewarm.py --asset-root "$asset_root" --local-only
-else
-    unset HF_HUB_OFFLINE
-    python workflow/prepare_assets.py --asset-root "$asset_root"
-    python workflow/prewarm.py --asset-root "$asset_root"
+if [[ "${SKIP_ASSET_VERIFY:-0}" != "1" ]]; then
+    if [[ "$prepare_mode" == "0" ]]; then
+        export HF_HUB_OFFLINE=1
+        python workflow/prepare_runtime.py --asset-root "$asset_root" --local-only
+    else
+        unset HF_HUB_OFFLINE
+        python workflow/prepare_runtime.py --asset-root "$asset_root"
+    fi
 fi
 if ! h20_assets_ready "$asset_root"; then
     echo "Asset preparation did not produce the complete pinned asset set" >&2
@@ -85,7 +100,7 @@ if [[ "${SKIP_PREFLIGHT:-0}" != "1" ]]; then
 fi
 
 if [[ "${SKIP_SMOKE:-0}" != "1" ]]; then
-    bash workflow/smoke_h20.sh
+    SMOKE_VARIANT="$variant" bash workflow/smoke_h20.sh
 fi
 
 if [[ "$variant" == "conv" ]]; then
@@ -217,20 +232,6 @@ if (( target == final_step )); then
     evaluate "$target_checkpoint" "$target" 4
 fi
 
-if [[ ! -f "$conv_history" ]]; then
-    echo "Pinned Conv FID history is missing: $conv_history" >&2
-    exit 1
-fi
-build_args=(
-    --output-dir "$result_root"
-    --conv-history "$conv_history"
-    --gpu-profile "$gpu_profile"
-)
-python workflow/build_results.py "${build_args[@]}"
-if [[ "$variant" == "rotation-head" && "$target" == "$final_step" ]]; then
-    python workflow/build_results.py "${build_args[@]}" --strict
-fi
-
 if ! h20_stage_complete "$variant" "$target" "$OUTPUT_ROOT" "$asset_root"; then
     echo "Stage artifacts did not pass the completion check" >&2
     python workflow/stage_status.py \
@@ -239,6 +240,10 @@ if ! h20_stage_complete "$variant" "$target" "$OUTPUT_ROOT" "$asset_root"; then
         --output-root "$OUTPUT_ROOT" \
         --asset-root "$asset_root"
     exit 1
+fi
+
+if (( target == final_step )); then
+    finalize_experiment
 fi
 
 echo "GPU_STAGE_COMPLETE variant=$variant target=$target"

@@ -11,9 +11,28 @@ asset_root="${ASSET_ROOT:-$OUTPUT_ROOT/assets}"
 gpu_profile="${GPU_PROFILE:-a100-40gb}"
 handoff_validate_gpu_profile "$gpu_profile"
 conv_source="$asset_root/huggingface/BlueSourceJY/SiT-Complementary/checkpoints/bs256_lr1e-4/conv-layer/1950000.pt"
-marker="$OUTPUT_ROOT/.gpu_smoke_passed-$gpu_profile"
-if [[ -f "$marker" ]]; then
-    echo "GPU_SMOKE_ALREADY_PASSED=$marker"
+requested="${SMOKE_VARIANT:-all}"
+if [[ "$requested" != "conv" && "$requested" != "rotation-head" && "$requested" != "all" ]]; then
+    echo "SMOKE_VARIANT must be conv, rotation-head, or all" >&2
+    exit 2
+fi
+
+variants=()
+if [[ "$requested" == "all" ]]; then
+    variants=(conv rotation-head)
+else
+    variants=("$requested")
+fi
+pending=()
+for variant in "${variants[@]}"; do
+    marker="$OUTPUT_ROOT/.gpu_smoke_passed-$gpu_profile-$variant"
+    if [[ -f "$marker" ]]; then
+        echo "GPU_SMOKE_ALREADY_PASSED=$marker"
+    else
+        pending+=("$variant")
+    fi
+done
+if (( ${#pending[@]} == 0 )); then
     exit 0
 fi
 
@@ -40,22 +59,26 @@ common=(
     --sample-batch-size 1
 )
 
-torchrun --standalone --nnodes=1 --nproc_per_node=8 train_conv.py \
-    "${common[@]}" \
-    --max-train-steps 1950001 \
-    --results-dir "$smoke_dir/conv" \
-    --run-name smoke-conv \
-    --ckpt "$conv_source"
-python workflow/checkpoint_tool.py inspect \
-    "$smoke_dir/conv/smoke-conv/checkpoints/1950001.pt" | grep -qx 1950001
-
-torchrun --standalone --nnodes=1 --nproc_per_node=8 train_rot_head.py \
-    "${common[@]}" \
-    --max-train-steps 1 \
-    --results-dir "$smoke_dir/rotation-head" \
-    --run-name smoke-rotation-head
-python workflow/checkpoint_tool.py inspect \
-    "$smoke_dir/rotation-head/smoke-rotation-head/checkpoints/0000001.pt" | grep -qx 1
-
-touch "$marker"
-echo "GPU_SMOKE_PASS=$marker"
+for variant in "${pending[@]}"; do
+    if [[ "$variant" == "conv" ]]; then
+        torchrun --standalone --nnodes=1 --nproc_per_node=8 train_conv.py \
+            "${common[@]}" \
+            --max-train-steps 1950001 \
+            --results-dir "$smoke_dir/conv" \
+            --run-name smoke-conv \
+            --ckpt "$conv_source"
+        python workflow/checkpoint_tool.py inspect \
+            "$smoke_dir/conv/smoke-conv/checkpoints/1950001.pt" | grep -qx 1950001
+    else
+        torchrun --standalone --nnodes=1 --nproc_per_node=8 train_rot_head.py \
+            "${common[@]}" \
+            --max-train-steps 1 \
+            --results-dir "$smoke_dir/rotation-head" \
+            --run-name smoke-rotation-head
+        python workflow/checkpoint_tool.py inspect \
+            "$smoke_dir/rotation-head/smoke-rotation-head/checkpoints/0000001.pt" | grep -qx 1
+    fi
+    marker="$OUTPUT_ROOT/.gpu_smoke_passed-$gpu_profile-$variant"
+    touch "$marker"
+    echo "GPU_SMOKE_PASS=$marker"
+done

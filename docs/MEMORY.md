@@ -45,6 +45,13 @@ This file records durable project context that should remain available across ta
   batch 32, and accumulation 1 preserve the original training topology. A100
   40GB is sufficient (the verified batch-64 Conv/Rotation-head runs used about
   11 GiB per GPU). Each `OUTPUT_ROOT` is locked to one GPU profile.
+- 2026-08-25: The external handoff supports two concurrent 8×A100 40GB nodes:
+  run Conv on one node and Rotation-head on the other, never one 16-rank job.
+  A coding-agent prompt selects exactly `conv` or `rotation-head`. Both agents
+  must use the same absolute shared `OUTPUT_ROOT` and `ASSET_ROOT`; locked asset
+  preparation and report finalization prevent cross-node races. The first
+  experiment leaves `JOINT_RESULTS_PENDING`, and the second produces the strict
+  combined report automatically.
 
 ## Current Work
 

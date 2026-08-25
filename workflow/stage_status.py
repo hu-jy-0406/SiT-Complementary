@@ -35,33 +35,6 @@ RUN_NAMES = {
     "conv": "SiT-S-2-ConvLayer-bs256-lr1e-4-800ep",
     "rotation-head": "SiT-S-2-RotationHead-bs256-lr1e-4-800ep",
 }
-FINAL_ARTIFACTS = (
-    "TRAINING_RESULTS.md",
-    "training_results.json",
-    "fid_results.tsv",
-    "fid_cfg1_training_curves.png",
-    "conv_fid_cfg1_curve.png",
-    "rotation_head_fid_cfg1_curve.png",
-)
-
-
-def _required_evaluations() -> list[tuple[str, int, float]]:
-    evaluations = [("conv", 1_950_000, 1.0)]
-    evaluations.extend(
-        ("conv", step, 1.0) for step in range(2_000_000, 4_000_001, 250_000)
-    )
-    evaluations.extend(
-        ("rotation-head", step, 1.0)
-        for step in range(250_000, 4_000_001, 250_000)
-    )
-    evaluations.extend(
-        (variant, FINAL_STEP, cfg)
-        for variant in RUN_NAMES
-        for cfg in (1.0, 4.0)
-    )
-    return evaluations
-
-
 def _same_path(recorded: object, expected: Path) -> bool:
     if not isinstance(recorded, str) or not recorded:
         return False
@@ -192,57 +165,6 @@ def completion_issues(
             )
         )
 
-    if variant == "rotation-head" and target == FINAL_STEP:
-        result_root = output_root / "training_results"
-        for required_variant, required_step, required_cfg in _required_evaluations():
-            label = f"{required_cfg:g}"
-            shard = (
-                result_root
-                / "raw"
-                / required_variant
-                / f"step-{required_step:07d}-cfg-{label}.json"
-            )
-            if required_variant == "conv" and required_step == 1_950_000:
-                required_checkpoint = (
-                    asset_root
-                    / "huggingface"
-                    / "BlueSourceJY"
-                    / "SiT-Complementary"
-                    / "checkpoints"
-                    / "bs256_lr1e-4"
-                    / "conv-layer"
-                    / "1950000.pt"
-                )
-            else:
-                required_checkpoint = (
-                    output_root
-                    / "training"
-                    / RUN_NAMES[required_variant]
-                    / "checkpoints"
-                    / f"{required_step:07d}.pt"
-                )
-            issues.extend(
-                _evaluation_issues(
-                    shard,
-                    required_variant,
-                    required_step,
-                    required_cfg,
-                    checkpoint=required_checkpoint,
-                    reference=reference,
-                )
-            )
-        for filename in FINAL_ARTIFACTS:
-            if not (result_root / filename).is_file():
-                issues.append(f"missing final result artifact: {result_root / filename}")
-        summary_path = result_root / "training_results.json"
-        if summary_path.is_file():
-            try:
-                summary = json.loads(summary_path.read_text())
-            except (OSError, json.JSONDecodeError) as exc:
-                issues.append(f"invalid final result summary: {exc}")
-            else:
-                if summary.get("status") != "COMPLETE":
-                    issues.append("final result summary is not COMPLETE")
     return issues
 
 

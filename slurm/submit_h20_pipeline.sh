@@ -9,6 +9,12 @@ source workflow/h20_common.sh
 : "${OUTPUT_ROOT:?Set OUTPUT_ROOT before submitting}"
 asset_root="${ASSET_ROOT:-$OUTPUT_ROOT/assets}"
 export GPU_PROFILE="${GPU_PROFILE:-a100-40gb}"
+: "${EXPERIMENT:?Set EXPERIMENT to conv, rotation-head, or all}"
+experiment="$EXPERIMENT"
+if [[ "$experiment" != "conv" && "$experiment" != "rotation-head" && "$experiment" != "all" ]]; then
+    echo "EXPERIMENT must be conv, rotation-head, or all" >&2
+    exit 2
+fi
 handoff_validate_gpu_profile "$GPU_PROFILE"
 handoff_lock_gpu_profile "$OUTPUT_ROOT" "$GPU_PROFILE"
 
@@ -17,6 +23,7 @@ partition_args=()
 [[ -n "${SLURM_ACCOUNT:-}" ]] && partition_args+=(--account "$SLURM_ACCOUNT")
 [[ -n "${SLURM_QOS:-}" ]] && partition_args+=(--qos "$SLURM_QOS")
 [[ -n "${SLURM_TIME:-}" ]] && partition_args+=(--time "$SLURM_TIME")
+[[ -n "${SLURM_NODELIST:-}" ]] && partition_args+=(--nodelist "$SLURM_NODELIST")
 default_gres="$(handoff_default_slurm_gres "$GPU_PROFILE")"
 gres="${SLURM_GRES:-$default_gres}"
 
@@ -52,8 +59,12 @@ submit_stage() {
     local variant="$1"
     local target="$2"
     if h20_stage_complete "$variant" "$target" "$OUTPUT_ROOT" "$asset_root"; then
-        echo "SKIPPED_COMPLETE variant=$variant target=$target"
-        return 0
+        local finalize_marker="$OUTPUT_ROOT/.finalize_passed-$variant"
+        if [[ "$target" != "4003200" || -f "$finalize_marker" ]]; then
+            echo "SKIPPED_COMPLETE variant=$variant target=$target"
+            return 0
+        fi
+        echo "SUBMITTING_FINALIZER variant=$variant target=$target"
     fi
 
     local dependency_args=()
@@ -80,12 +91,16 @@ submit_stage() {
     echo "SUBMITTED variant=$variant target=$target job=$previous"
 }
 
-for target in "${H20_CONV_TARGETS[@]}"; do
-    submit_stage conv "$target"
-done
-for target in "${H20_ROTATION_HEAD_TARGETS[@]}"; do
-    submit_stage rotation-head "$target"
-done
+if [[ "$experiment" == "conv" || "$experiment" == "all" ]]; then
+    for target in "${H20_CONV_TARGETS[@]}"; do
+        submit_stage conv "$target"
+    done
+fi
+if [[ "$experiment" == "rotation-head" || "$experiment" == "all" ]]; then
+    for target in "${H20_ROTATION_HEAD_TARGETS[@]}"; do
+        submit_stage rotation-head "$target"
+    done
+fi
 
 if (( submitted )); then
     echo "SUBMITTED_STAGE_COUNT=$submitted"
