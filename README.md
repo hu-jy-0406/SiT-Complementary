@@ -78,7 +78,10 @@ node, and set `NPROC_PER_NODE` to the number of assigned GPUs.
 
 The portable, restart-safe handoff is specified in
 [`H20_TRAINING_TASK.md`](H20_TRAINING_TASK.md). A coding agent should read that
-file before starting. It downloads the pinned Conv resume checkpoint from
+file before starting. The contract first verifies whether a functioning Slurm
+controller is available, then selects either the Slurm submission chain or the
+persistent standalone-server launcher. It downloads the pinned Conv resume
+checkpoint from
 [`BlueSourceJY/SiT-Complementary`](https://huggingface.co/BlueSourceJY/SiT-Complementary),
 trains Conv and then Rotation-head through 800 epochs, runs the complete FID
 schedule, and builds a strict Markdown/JSON/TSV/PNG result package.

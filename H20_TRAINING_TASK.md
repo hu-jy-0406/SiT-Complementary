@@ -13,6 +13,47 @@ Do not declare success until the strict report check passes.
 
 Canonical repository: <https://github.com/hu-jy-0406/SiT-Complementary>
 
+## Detect the execution environment first
+
+Before installing dependencies, scanning ImageNet, or running any GPU command,
+classify the target machine. Do not infer that Slurm is usable merely because a
+client binary is installed. Run this lightweight check from the clone:
+
+```bash
+if [[ -n "${SLURM_JOB_ID:-}" || -n "${SLURM_CLUSTER_NAME:-}" ]]; then
+  EXECUTION_MODE=slurm
+elif command -v sbatch >/dev/null 2>&1 && command -v squeue >/dev/null 2>&1; then
+  if squeue -h -u "$(id -un)" >/dev/null 2>&1; then
+    EXECUTION_MODE=slurm
+  else
+    EXECUTION_MODE=undetermined
+  fi
+elif ! command -v sbatch >/dev/null 2>&1 && ! command -v squeue >/dev/null 2>&1; then
+  EXECUTION_MODE=standalone
+else
+  EXECUTION_MODE=undetermined
+fi
+export EXECUTION_MODE
+printf 'EXECUTION_MODE=%s\n' "$EXECUTION_MODE"
+```
+
+Interpret the result conservatively:
+
+- `slurm`: use **Execution option B**. Outside an allocation, the current host
+  is a login/submission host; do not run preflight, smoke tests, training, or
+  FID there. Submit those operations to compute nodes.
+- `standalone`: this is only a candidate dedicated server. Confirm with the
+  owner that the machine is not governed by another scheduler, inspect
+  `nvidia-smi`, and verify exclusive use of all eight H20 GPUs. Then use
+  **Execution option A**.
+- `undetermined`: stop and ask the server owner. This includes a partial Slurm
+  installation or an installed client whose controller query failed. Never
+  reinterpret this result as permission to run directly.
+
+Make this decision once per server and do not mix the direct and Slurm launch
+methods for the same active run. Site-specific paths remain environment
+variables; do not edit tracked files to configure the server.
+
 ## Non-negotiable experiment protocol
 
 | Setting | Required value |
@@ -117,8 +158,15 @@ ready markers under `$ASSET_ROOT`.
 
 ## Required preflight
 
-Run this inside a legitimate allocation or on an otherwise dedicated H20 node,
-never on a shared login node:
+Run this inside a legitimate Slurm allocation when `EXECUTION_MODE=slurm`, or
+on the confirmed dedicated H20 server when `EXECUTION_MODE=standalone`. Never
+run it on a shared login node:
+
+For the Slurm branch, `slurm/submit_h20_pipeline.sh` schedules these same checks
+inside its first compute job; do not execute the block manually on the login
+node. It is shown explicitly so it can be run inside an interactive allocation
+for diagnosis. For the standalone branch, run it directly on the dedicated
+server before launching the persistent pipeline.
 
 ```bash
 export SIT_VAE_ROOT="$ASSET_ROOT/vae"
@@ -143,15 +191,33 @@ optimizer step and one real 8-rank Rotation-head optimizer step at the fixed
 batch configuration. Long training starts only after `.h20_smoke_passed` is
 written under `OUTPUT_ROOT`.
 
-## Execution option A: dedicated node/no wall-time limit
+## Execution option A: standalone dedicated server
+
+Use this option only when scheduler detection returned `standalone` and the
+server owner confirmed exclusive access to all eight H20 GPUs. Because the full
+workflow runs for multiple weeks, do not leave it attached only to an SSH or
+coding-agent session. Use the server's persistent process manager (`systemd`,
+`tmux`, or an equivalent facility) when available. A portable `nohup` fallback
+is shown below.
 
 Run the idempotent pipeline from an activated environment:
 
 ```bash
 mkdir -p "$OUTPUT_ROOT"
-set -o pipefail
-bash workflow/run_h20_pipeline.sh 2>&1 | tee "$OUTPUT_ROOT/pipeline.log"
+nohup bash -c \
+  'set -o pipefail; bash workflow/run_h20_pipeline.sh 2>&1 | tee -a "$OUTPUT_ROOT/pipeline.log"' \
+  >"$OUTPUT_ROOT/launcher.log" 2>&1 </dev/null &
+PIPELINE_PID=$!
+printf '%s\n' "$PIPELINE_PID" >"$OUTPUT_ROOT/pipeline.pid"
+sleep 2
+kill -0 "$PIPELINE_PID"
+tail -n 20 "$OUTPUT_ROOT/launcher.log"
 ```
+
+Record the PID and continue monitoring both logs and GPU health; `nohup` keeps
+the process independent of a normal shell hangup but is not a substitute for
+host-level failure monitoring. Before relaunching, verify that the recorded PID
+is no longer running so two pipelines cannot write the same `OUTPUT_ROOT`.
 
 It trains Conv in one continuous process, evaluates all saved Conv checkpoints,
 then does the same for Rotation-head. Evaluation therefore does not force
@@ -168,7 +234,11 @@ revalidates all pinned assets before loading a model; ready markers are only a
 cheap hint for submission planning. The default `auto` downloads only missing
 or invalid assets and makes no network request when every local hash matches.
 
-## Execution option B: Slurm with wall-time limits
+## Execution option B: functioning Slurm cluster
+
+Use this option only when scheduler detection returned `slurm`. Run submission
+commands from a login/submission host; the generated jobs perform all heavy
+preflight, smoke, training, and FID work on allocated compute nodes.
 
 The generic submitter creates an `afterok` chain of 8-GPU stages. Set the
 site-specific options that exist on the target cluster:
